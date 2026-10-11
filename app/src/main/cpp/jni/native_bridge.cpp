@@ -1,5 +1,6 @@
 #include <jni.h>
 
+#include <GLES3/gl3.h>
 #include <android/log.h>
 
 #include <atomic>
@@ -62,6 +63,15 @@ Java_dev_koggles_NativeBridge_flushAudio(JNIEnv*, jobject) {
 JNIEXPORT jfloat JNICALL
 Java_dev_koggles_NativeBridge_recentRms(JNIEnv*, jobject) {
     return Engine::instance().audio().lastReadRms();
+}
+
+// GL thread. Clears pending GL error flags (e.g. GL_INVALID_VALUE from deleting a lost
+// context's program names in a new context) and returns how many were cleared.
+JNIEXPORT jint JNICALL
+Java_dev_koggles_NativeBridge_glDrainErrors(JNIEnv*, jobject) {
+    jint count = 0;
+    while (glGetError() != GL_NO_ERROR && count < 64) ++count;
+    return count;
 }
 
 JNIEXPORT jint JNICALL

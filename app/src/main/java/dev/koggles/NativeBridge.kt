@@ -19,6 +19,9 @@ object NativeBridge {
     external fun flushAudio()
     external fun recentRms(): Float
 
+    /** GL thread: clears pending GL error flags; returns how many were cleared. */
+    external fun glDrainErrors(): Int
+
     /** Debug aid: number of native renderers destroyed in this process. */
     external fun rendererDestroyCount(): Int
 

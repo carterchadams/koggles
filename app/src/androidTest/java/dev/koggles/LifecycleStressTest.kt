@@ -97,6 +97,9 @@ class LifecycleStressTest {
                 Thread.sleep(20)
             }
             assertFrameOk(scenario, id)
+            scenario.onActivity { activity ->
+                assertEquals("first frame after context loss", 0, activity.visualizerView?.firstFrameGlError)
+            }
             Thread.sleep(500) // no further destroys may follow
             assertEquals(1, NativeBridge.rendererDestroyCount() - destroysBefore)
         }

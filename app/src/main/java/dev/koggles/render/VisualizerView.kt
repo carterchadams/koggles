@@ -2,6 +2,7 @@ package dev.koggles.render
 
 import android.content.Context
 import android.opengl.GLSurfaceView
+import android.util.Log
 import dev.koggles.AppGraph
 import dev.koggles.DebugHooks
 import dev.koggles.NativeBridge
@@ -26,6 +27,11 @@ class VisualizerView(
     @Volatile
     var onFrameDrawn: ((glError: Int) -> Unit)? = null
 
+    /** GL error of the first frame drawn in the current EGL context (-1 until drawn). */
+    @Volatile
+    var firstFrameGlError: Int = -1
+        private set
+
     private var sized = false
 
     init {
@@ -33,13 +39,20 @@ class VisualizerView(
         preserveEGLContextOnPause = true
         setRenderer(object : Renderer {
             override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-                // A new EGL context. Destroy the previous renderer before creating the new
-                // one: the fresh context owns no GL names yet, so its deletes are no-ops.
+                // A new EGL context: the previous renderer's GL objects died with its context.
+                // Destroying it frees its CPU state; its deletes of stale names (programs in
+                // particular) raise GL errors in this fresh context, which are cleared here so
+                // they cannot surface on the first frame.
                 val old = commands.attachedHandle
-                if (old != 0L) NativeBridge.rendererDestroy(old)
+                if (old != 0L) {
+                    NativeBridge.rendererDestroy(old)
+                    val cleared = NativeBridge.glDrainErrors()
+                    if (cleared > 0) Log.d("Koggles", "cleared $cleared GL errors from stale renderer teardown")
+                }
                 val h = NativeBridge.rendererCreate()
                 commands.attach(h)
                 sized = false
+                firstFrameGlError = -1
             }
 
             override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -60,7 +73,9 @@ class VisualizerView(
                 if (h == 0L) return
                 commands.drain()
                 NativeBridge.rendererDrawFrame(h)
-                onFrameDrawn?.invoke(NativeBridge.rendererLastGlError(h))
+                val error = NativeBridge.rendererLastGlError(h)
+                if (firstFrameGlError == -1) firstFrameGlError = error
+                onFrameDrawn?.invoke(error)
             }
         })
     }
