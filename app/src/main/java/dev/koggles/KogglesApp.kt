@@ -13,5 +13,6 @@ class KogglesApp : Application() {
         val display = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
         NativeBridge.cardboardInit(createDisplayContext(display))
         AppGraph.init(this)
+        AppGraph.playback.start()
     }
 }

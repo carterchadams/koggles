@@ -1,6 +1,7 @@
 #include "renderer.h"
 
 #include "engine.h"
+#include "../jni/upcalls.h"
 
 #include <GLES3/gl3.h>
 #include <android/log.h>
@@ -13,16 +14,26 @@ namespace koggles {
 // projectM resolves the idle preset only with its full name (ProjectM.cpp uses the same URL).
 constexpr const char* kIdlePresetUrl = "idle://Geiss & Sperl - Feedback (projectM idle HDR mix).milk";
 
-namespace {
-void onPresetSwitchFailed(const char* /*filename*/, const char* message, void* /*userData*/) {
+void Renderer::onSwitchFailed(const char* /*filename*/, const char* message, void* self) {
+    auto* r = static_cast<Renderer*>(self);
     LOGI("failed-cb %s", message ? message : "");
+    if (r->pendingId_ >= 0) {
+        const int64_t id = r->pendingId_;
+        r->pendingId_ = -1;
+        upcalls::presetFailed(id, message);
+    }
 }
-}  // namespace
+
+void Renderer::onSwitchRequested(bool isHardCut, void* /*self*/) {
+    upcalls::switchRequested(isHardCut);
+}
 
 Renderer::Renderer() : pcm_(2 * projectm_pcm_get_max_samples()) {
     pm_ = projectm_create();
     if (pm_ != nullptr) {
-        projectm_set_preset_switch_failed_event_callback(pm_, &onPresetSwitchFailed, this);
+        projectm_set_preset_switch_failed_event_callback(pm_, &Renderer::onSwitchFailed, this);
+        projectm_set_preset_switch_requested_event_callback(pm_, &Renderer::onSwitchRequested, this);
+        projectm_set_preset_locked(pm_, true);  // until transition settings arrive
     }
 }
 
@@ -83,17 +94,33 @@ void Renderer::drawFrame() {
         goggles2d_.draw(eyeTexture);
     }
     lastGlError_ = static_cast<int>(glGetError());
+    if (pendingId_ >= 0) {
+        // No failure was reported for the pending load and a frame has rendered: it loaded.
+        const int64_t id = pendingId_;
+        pendingId_ = -1;
+        upcalls::presetLoaded(id);
+    }
+}
+
+void Renderer::setTransition(bool softCut, double blendSec, int presetDurationSec, bool hardCuts, bool locked) {
+    if (pm_ == nullptr) return;
+    projectm_set_soft_cut_duration(pm_, softCut ? blendSec : 0.0);
+    projectm_set_preset_duration(pm_, presetDurationSec > 0 ? presetDurationSec : 1);
+    projectm_set_hard_cut_enabled(pm_, hardCuts);
+    projectm_set_preset_locked(pm_, locked || presetDurationSec == 0);
 }
 
 void Renderer::loadPresetData(const std::string& data, int64_t requestId, bool smooth) {
     if (pm_ == nullptr) return;
     LOGI("load-begin %lld", static_cast<long long>(requestId));
+    pendingId_ = requestId;  // the failure callback fires synchronously inside the load
     projectm_load_preset_data(pm_, data.c_str(), smooth);
     LOGI("load-end %lld", static_cast<long long>(requestId));
 }
 
-void Renderer::loadIdle(int64_t /*requestId*/) {
+void Renderer::loadIdle(int64_t requestId) {
     if (pm_ == nullptr) return;
+    pendingId_ = requestId;
     projectm_load_preset_file(pm_, kIdlePresetUrl, false);
 }
 

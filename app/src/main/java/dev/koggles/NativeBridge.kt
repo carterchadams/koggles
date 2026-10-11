@@ -45,6 +45,9 @@ object NativeBridge {
     /** Sets projectM's texture search paths; textures are reset only when the list changed. */
     external fun rendererSetTextureSearchPaths(h: Long, paths: Array<String>)
     external fun rendererLastGlError(h: Long): Int
+    external fun rendererSetTransition(
+        h: Long, softCut: Boolean, blendSec: Double, presetDurationSec: Int, hardCuts: Boolean, locked: Boolean,
+    )
     external fun rendererSetGoggles(h: Long, on: Boolean)
     external fun rendererSetLens(h: Long, offsetMm: Float, distortion: Boolean, xdpi: Float)
 
@@ -56,4 +59,15 @@ object NativeBridge {
 
     /** Cardboard's counter of saved viewer-profile changes (increments after a QR scan). */
     external fun viewerParamsChangedCount(): Int
+
+    /** Receives renderer events on the main thread. */
+    @Volatile
+    var listener: NativeListener? = null
+
+    private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+
+    // Upcalls from the GL thread (upcalls.cpp); re-posted to the main thread.
+    @JvmStatic fun onSwitchRequested(hardCut: Boolean) { main.post { listener?.onSwitchRequested(hardCut) } }
+    @JvmStatic fun onPresetFailed(requestId: Long, message: String) { main.post { listener?.onPresetFailed(requestId, message) } }
+    @JvmStatic fun onPresetLoaded(requestId: Long) { main.post { listener?.onPresetLoaded(requestId) } }
 }

@@ -19,6 +19,10 @@ import dev.koggles.audio.Source
 import dev.koggles.audio.UnavailableSource
 import dev.koggles.audio.VisualizerSource
 import dev.koggles.presets.PresetLibrary
+import dev.koggles.playback.PlaybackController
+import dev.koggles.playback.Playlist
+import dev.koggles.render.LensState
+import dev.koggles.render.TransitionState
 import dev.koggles.render.NativeRendererPort
 import dev.koggles.render.RenderCommands
 import dev.koggles.settings.Settings
@@ -32,6 +36,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlin.random.Random
 
 /** The one preferences file; [Settings] and [PresetLibrary] use disjoint key prefixes in it. */
 
@@ -56,6 +62,9 @@ object AppGraph {
         private set
 
     lateinit var libraryRepo: LibraryRepository
+        private set
+
+    lateinit var playback: PlaybackController
         private set
 
     /** Every PCM producer pushes through this gate, tagged with its source generation. */
@@ -112,6 +121,33 @@ object AppGraph {
         appScope.launch {
             audio.snapshot.map { it.source }.distinctUntilChanged().drop(1).collect { source ->
                 settings.update { it.copy(source = source) }
+            }
+        }
+        playback = PlaybackController(
+            scope = appScope,
+            playlist = Playlist(Random.Default),
+            sink = renderCommands,
+            reader = { ref ->
+                withContext(Dispatchers.IO) {
+                    val pack = libraryRepo.state.value.catalog.pack(ref.packId)
+                        ?: throw java.io.IOException("pack ${ref.packId} is gone")
+                    pack.tree.readText(ref.node)
+                }
+            },
+            texturePaths = libraryRepo::texturePathsFor,
+            settings = settings,
+            library = library,
+            libraryState = libraryRepo.state,
+        )
+        NativeBridge.listener = playback
+        // Renderer-side settings: replayed onto each new renderer by RenderCommands.
+        appScope.launch {
+            settings.values.collect { v ->
+                renderCommands.setTransition(
+                    TransitionState(v.softCut, v.blendSec, v.presetDurationSec, v.hardCutsOnBeat, v.locked),
+                )
+                renderCommands.setGoggles(v.goggles)
+                renderCommands.setLens(LensState(v.lensOffsetMm, v.distortion))
             }
         }
     }

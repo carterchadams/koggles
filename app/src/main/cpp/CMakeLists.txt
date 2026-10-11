@@ -41,6 +41,7 @@ add_library(koggles SHARED
     core/eye_layout.cpp
     core/frame_stats.cpp
     jni/native_bridge.cpp
+    jni/upcalls.cpp
     renderer/engine.cpp
     renderer/eye_capture.cpp
     renderer/quad.cpp
