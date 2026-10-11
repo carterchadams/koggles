@@ -135,21 +135,24 @@ class LifecycleStressTest {
         return commands.attachedHandle
     }
 
-    /** Waits for the current view's GL thread to run, then checks the last frame's GL error. */
+    /**
+     * Waits for the current view to draw a real frame (after draining queued commands) and checks
+     * that frame's GL error, the accepted request, and the request applied to the native renderer.
+     */
     private fun assertFrameOk(scenario: ActivityScenario<MainActivity>, expectedRequestId: Long) {
         awaitAttached()
         val glError = AtomicInteger(-1)
-        val done = CountDownLatch(1)
+        val drawn = CountDownLatch(2) // skip a frame that may have started before the hook was set
         scenario.onActivity { activity ->
-            val view = checkNotNull(activity.visualizerView)
-            view.queueEvent {
-                NativeBridge.rendererDrawFrame(commands.attachedHandle)
-                glError.set(NativeBridge.rendererLastGlError(commands.attachedHandle))
-                done.countDown()
+            checkNotNull(activity.visualizerView).onFrameDrawn = { error ->
+                glError.set(error)
+                drawn.countDown()
             }
         }
-        assertTrue("GL thread ran", done.await(10, SECONDS))
+        assertTrue("real frame drawn", drawn.await(10, SECONDS))
+        scenario.onActivity { it.visualizerView?.onFrameDrawn = null }
         assertEquals(0, glError.get())
         assertEquals(expectedRequestId, commands.state.value.preset?.requestId)
+        assertEquals(expectedRequestId, commands.lastAppliedRequestId)
     }
 }

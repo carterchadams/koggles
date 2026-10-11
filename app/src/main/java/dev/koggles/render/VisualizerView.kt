@@ -22,6 +22,10 @@ class VisualizerView(
     /** Called on the GL thread after a renderer is created and sized, once per EGL context. */
     var onRendererReady: ((Long) -> Unit)? = null
 
+    /** GL thread: called after each real frame with that frame's GL error. Test observation hook. */
+    @Volatile
+    var onFrameDrawn: ((glError: Int) -> Unit)? = null
+
     private var sized = false
 
     init {
@@ -56,6 +60,7 @@ class VisualizerView(
                 if (h == 0L) return
                 commands.drain()
                 NativeBridge.rendererDrawFrame(h)
+                onFrameDrawn?.invoke(NativeBridge.rendererLastGlError(h))
             }
         })
     }

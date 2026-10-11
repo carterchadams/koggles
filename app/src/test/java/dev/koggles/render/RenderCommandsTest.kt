@@ -160,4 +160,16 @@ class RenderCommandsTest {
         commands.drain()
         assertEquals(listOf("texturePaths(1,/a, /b)", "load(1,x,9,true)"), port.calls)
     }
+
+    @Test
+    fun lastAppliedRequestId_tracksExecutedLoadsOnly() {
+        commands.loadPreset("a", 3, true, emptyList())
+        assertEquals(0L, commands.lastAppliedRequestId) // accepted, not applied
+        commands.attach(1)
+        assertEquals(3L, commands.lastAppliedRequestId) // replay applied it
+        commands.loadIdle(4)
+        assertEquals(3L, commands.lastAppliedRequestId)
+        commands.drain()
+        assertEquals(4L, commands.lastAppliedRequestId)
+    }
 }

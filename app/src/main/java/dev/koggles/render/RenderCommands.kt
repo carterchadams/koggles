@@ -47,6 +47,11 @@ class RenderCommands(private val native: RendererPort) {
     @Volatile
     private var owner: Thread? = null
 
+    /** Request id most recently applied to the native renderer (0 if none). */
+    @Volatile
+    var lastAppliedRequestId: Long = 0L
+        private set
+
     fun loadPreset(data: String, requestId: Long, smooth: Boolean, texturePaths: List<String>) = mutate {
         if (isSuperseded(it, requestId)) return@mutate null
         it.copy(preset = PresetLoad(requestId, data), texturePaths = texturePaths) to { h: Long ->
@@ -54,6 +59,7 @@ class RenderCommands(private val native: RendererPort) {
             if (_state.value.preset?.requestId == requestId) {
                 native.setTexturePaths(h, texturePaths)
                 native.load(h, data, requestId, smooth)
+                lastAppliedRequestId = requestId
             }
         }
     }
@@ -61,7 +67,10 @@ class RenderCommands(private val native: RendererPort) {
     fun loadIdle(requestId: Long) = mutate {
         if (isSuperseded(it, requestId)) return@mutate null
         it.copy(preset = PresetLoad(requestId, null)) to { h: Long ->
-            if (_state.value.preset?.requestId == requestId) native.loadIdle(h, requestId)
+            if (_state.value.preset?.requestId == requestId) {
+                native.loadIdle(h, requestId)
+                lastAppliedRequestId = requestId
+            }
         }
     }
 
@@ -105,6 +114,7 @@ class RenderCommands(private val native: RendererPort) {
         snapshot.preset?.let { p ->
             if (p.data == null) native.loadIdle(handle, p.requestId)
             else native.load(handle, p.data, p.requestId, false)
+            lastAppliedRequestId = p.requestId
         }
         return previous
     }
