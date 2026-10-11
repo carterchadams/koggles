@@ -76,4 +76,27 @@ class FolderPickerTest {
         assertEquals("second", acquired.last())
         assertEquals("only the latest selection refreshes", 1, refreshed)
     }
+
+    @Test fun successThenFailedLaterPick_stillRefreshes() = runTest {
+        val firstGate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var refreshed = 0
+        val errors = mutableListOf<String>()
+        val picker = FolderPicker(
+            scope = this,
+            io = StandardTestDispatcher(testScheduler),
+            acquire = { uri ->
+                if (uri == "first") firstGate.await() else throw SecurityException("denied")
+            },
+            onAcquired = { refreshed++ },
+            onFailed = { errors += it },
+        )
+        picker.picked("first")
+        testScheduler.runCurrent()
+        picker.picked("second")
+        testScheduler.runCurrent()
+        firstGate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("first's grant replaced the old one: the catalog must follow it", 1, refreshed)
+        assertEquals(1, errors.size)
+    }
 }

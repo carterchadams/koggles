@@ -25,6 +25,9 @@ class FolderPicker(
     private val lock = Mutex()
     private val latest = AtomicLong(0)
 
+    /** A grant was replaced but the catalog not yet refreshed (guarded by [lock]). */
+    private var refreshOwed = false
+
     fun picked(uri: String) {
         val mine = latest.incrementAndGet()
         scope.launch {
@@ -39,9 +42,16 @@ class FolderPicker(
                 } catch (e: Exception) {
                     e
                 }
-                when {
-                    failure != null -> onFailed("Couldn't use that folder: ${failure.message ?: failure.javaClass.simpleName}")
-                    mine == latest.get() -> onAcquired()
+                if (failure == null) {
+                    refreshOwed = true // the persisted grant changed; the catalog must follow it
+                } else {
+                    onFailed("Couldn't use that folder: ${failure.message ?: failure.javaClass.simpleName}")
+                }
+                // The newest selection settles the catalog: one refresh for every grant change
+                // that happened, even when this selection itself failed.
+                if (mine == latest.get() && refreshOwed) {
+                    refreshOwed = false
+                    onAcquired()
                 }
             }
         }
