@@ -403,4 +403,12 @@ class AudioMachineTest {
             StartSource(Source.HighQuality),
         )
     }
+
+    @Test
+    fun active_sourceFailed_failsAndStops() {
+        val active = AudioSnapshot(state = AudioState.Active, source = Source.HighQuality, hasPermission = true, activityStarted = true)
+        val (next, effects) = reduce(active, AudioEvent.SourceFailed(FailReason.CaptureLost))
+        assertEquals(AudioState.Failed(FailReason.CaptureLost), next.state)
+        assertEquals(listOf(AudioEffect.StopSource, AudioEffect.FlushAudio), effects)
+    }
 }

@@ -5,7 +5,7 @@ package dev.koggles.audio
 
 enum class Source { Standard, HighQuality }
 
-enum class FailReason { VisualizerUnavailable, CaptureStartFailed, ConsentDeclined }
+enum class FailReason { VisualizerUnavailable, CaptureStartFailed, ConsentDeclined, CaptureLost }
 
 sealed interface AudioState {
     data object Idle : AudioState
@@ -122,10 +122,12 @@ fun reduce(s: AudioSnapshot, e: AudioEvent): Pair<AudioSnapshot, List<AudioEffec
             if (st == AudioState.Starting) s.enter(AudioState.Active) to emptyList() else unchanged(s)
 
         is AudioEvent.SourceFailed ->
-            if (st == AudioState.Starting) {
-                s.enter(AudioState.Failed(e.reason)) to listOf(AudioEffect.StopSource)
-            } else {
-                unchanged(s)
+            when (st) {
+                AudioState.Starting -> s.enter(AudioState.Failed(e.reason)) to listOf(AudioEffect.StopSource)
+                // A running source died (e.g. AudioRecord read error): surface it, don't stay Active.
+                AudioState.Active -> s.enter(AudioState.Failed(e.reason)) to
+                    listOf(AudioEffect.StopSource, AudioEffect.FlushAudio)
+                else -> unchanged(s)
             }
 
         AudioEvent.ProjectionStopped ->

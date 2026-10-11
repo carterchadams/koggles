@@ -25,6 +25,7 @@ fun AudioErrorScreen(
             )
             FailReason.CaptureStartFailed -> MessageScreen("Audio capture couldn't start.", "Try again", onRetry)
             FailReason.ConsentDeclined -> MessageScreen("Audio capture needs your permission.", "Try again", onRetry)
+            FailReason.CaptureLost -> MessageScreen("Audio capture stopped.", "Try again", onRetry)
         }
         else -> Unit
     }

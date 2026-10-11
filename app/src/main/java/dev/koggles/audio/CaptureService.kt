@@ -39,16 +39,32 @@ class CaptureService : Service() {
             startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
             val resultCode = intent!!.getIntExtra(EXTRA_RESULT_CODE, 0)
             val data = checkNotNull(IntentCompat.getParcelableExtra(intent, EXTRA_DATA, Intent::class.java))
-            val projection = checkNotNull(
-                getSystemService(MediaProjectionManager::class.java).getMediaProjection(resultCode, data),
-            ) { "consent result did not yield a MediaProjection" }
-            projection.registerCallback(
-                object : MediaProjection.Callback() {
-                    override fun onStop() = CaptureBus.deliver(generation) { onProjectionStopped() }
-                },
-                Handler(Looper.getMainLooper()),
+            val startup = CaptureStartup<MediaProjection, AudioRecord>(
+                stopProjection = { it.stop() },
+                releaseRecord = { it.release() },
             )
-            capture = Capture(projection).also { it.start() }
+            val (projection, record) = startup.start(
+                acquire = {
+                    checkNotNull(getSystemService(MediaProjectionManager::class.java).getMediaProjection(resultCode, data)) {
+                        "consent result did not yield a MediaProjection"
+                    }.also { p ->
+                        p.registerCallback(
+                            object : MediaProjection.Callback() {
+                                override fun onStop() = CaptureBus.deliver(generation) { onProjectionStopped() }
+                            },
+                            Handler(Looper.getMainLooper()),
+                        )
+                    }
+                },
+                build = ::buildRecord,
+                begin = { r ->
+                    check(r.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord not initialized" }
+                    r.startRecording()
+                },
+            )
+            capture = Capture(projection, record) {
+                CaptureBus.deliver(generation) { onFailed(FailReason.CaptureLost) }
+            }.also { it.startReader() }
             CaptureBus.deliver(generation) { onStarted() }
         } catch (e: Exception) {
             Log.w(TAG, "capture failed to start", e)
@@ -76,8 +92,31 @@ class CaptureService : Service() {
             .build()
     }
 
-    private class Capture(private val projection: MediaProjection) {
-        private val record: AudioRecord
+    private fun buildRecord(projection: MediaProjection): AudioRecord {
+        val config = AudioPlaybackCaptureConfiguration.Builder(projection)
+            .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+            .addMatchingUsage(AudioAttributes.USAGE_GAME)
+            .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+            .build()
+        val format = AudioFormat.Builder()
+            .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+            .setSampleRate(SAMPLE_RATE)
+            .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
+            .build()
+        val minBytes = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
+        return AudioRecord.Builder()
+            .setAudioFormat(format)
+            .setBufferSizeInBytes(maxOf(minBytes, FRAMES_PER_READ * 2 * 4 * 4))
+            .setAudioPlaybackCaptureConfig(config)
+            .build()
+    }
+
+    /** A started capture: owns the projection and the recording AudioRecord. */
+    private class Capture(
+        private val projection: MediaProjection,
+        private val record: AudioRecord,
+        private val onLost: () -> Unit,
+    ) {
         private val bytes = ByteBuffer.allocateDirect(FRAMES_PER_READ * 2 * 4).order(ByteOrder.nativeOrder())
         private val floats = bytes.asFloatBuffer()
 
@@ -85,37 +124,16 @@ class CaptureService : Service() {
         private var running = false
         private var reader: Thread? = null
 
-        init {
-            val config = AudioPlaybackCaptureConfiguration.Builder(projection)
-                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                .build()
-            val format = AudioFormat.Builder()
-                .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-                .setSampleRate(SAMPLE_RATE)
-                .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
-                .build()
-            val minBytes = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
-            record = AudioRecord.Builder()
-                .setAudioFormat(format)
-                .setBufferSizeInBytes(maxOf(minBytes, FRAMES_PER_READ * 2 * 4 * 4))
-                .setAudioPlaybackCaptureConfig(config)
-                .build()
-        }
-
-        fun start() {
-            check(record.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord not initialized" }
-            record.startRecording()
+        fun startReader() {
             running = true
-            reader = Thread({
-                while (running) {
-                    bytes.clear()
-                    val read = record.read(bytes, bytes.capacity(), AudioRecord.READ_BLOCKING)
-                    if (read > 0) NativeBridge.pushPcmFloat(floats, read / (2 * 4))
-                    else if (read < 0) break
-                }
-            }, "koggles-capture").also { it.start() }
+            val loop = CaptureReader(
+                buffer = bytes,
+                read = { b -> record.read(b, b.capacity(), AudioRecord.READ_BLOCKING) },
+                push = { n -> NativeBridge.pushPcmFloat(floats, n / (2 * 4)) },
+                isRunning = { running },
+                onUnexpectedError = onLost,
+            )
+            reader = Thread(loop::run, "koggles-capture").also { it.start() }
         }
 
         fun close() {
