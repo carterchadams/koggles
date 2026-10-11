@@ -54,3 +54,15 @@ internal class CaptureReader(
         }
     }
 }
+
+/** AudioRecord.RECORDSTATE_RECORDING. */
+internal const val RECORDSTATE_RECORDING = 3
+
+/**
+ * Starts recording and verifies it took effect: startRecording() can return normally while the
+ * native start failed, leaving the record stopped.
+ */
+internal fun requireRecording(startRecording: () -> Unit, recordingState: () -> Int) {
+    startRecording()
+    check(recordingState() == RECORDSTATE_RECORDING) { "AudioRecord did not enter the recording state" }
+}

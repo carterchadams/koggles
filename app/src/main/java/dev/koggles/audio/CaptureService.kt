@@ -59,7 +59,7 @@ class CaptureService : Service() {
                 build = ::buildRecord,
                 begin = { r ->
                     check(r.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord not initialized" }
-                    r.startRecording()
+                    requireRecording(startRecording = r::startRecording, recordingState = { r.recordingState })
                 },
             )
             capture = Capture(projection, record) {

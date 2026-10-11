@@ -83,4 +83,18 @@ class CaptureHelpersTest {
         ).run()
         assertTrue(pushed == listOf(16, 8))
     }
+
+    @Test
+    fun requireRecording_startReturnsButNotRecording_throws() {
+        try {
+            requireRecording(startRecording = { }, recordingState = { 1 /* RECORDSTATE_STOPPED */ })
+            fail("expected exception")
+        } catch (e: IllegalStateException) {
+        }
+    }
+
+    @Test
+    fun requireRecording_recording_passes() {
+        requireRecording(startRecording = { }, recordingState = { RECORDSTATE_RECORDING })
+    }
 }
