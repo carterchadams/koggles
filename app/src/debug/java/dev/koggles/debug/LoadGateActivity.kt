@@ -64,10 +64,18 @@ class LoadGateActivity : Activity() {
                 filesDir,
                 packageManager.getPackageInfo(packageName, 0).lastUpdateTime,
             ).installIfNeeded()
-            val texturePaths = if (bundledTextures.exists()) listOf(bundledTextures.absolutePath) else emptyList()
             main.post {
                 if (!active) return@post
-                Log.i(TAG, "start mode=${if (goggles) "goggles" else "normal"} presets=${presets.size} textures=${bundledTextures.exists()}")
+                if (!bundledTextures.isDirectory) {
+                    // projectM would substitute placeholder textures: a different workload, so no run.
+                    Log.e(TAG, "invalid gate: bundled textures unavailable at $bundledTextures")
+                    active = false
+                    main.removeCallbacksAndMessages(null)
+                    finish()
+                    return@post
+                }
+                val texturePaths = listOf(bundledTextures.absolutePath)
+                Log.i(TAG, "start mode=${if (goggles) "goggles" else "normal"} presets=${presets.size} textures=$bundledTextures")
                 var i = 0
                 fun step() {
                     if (!active) return
