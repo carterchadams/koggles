@@ -152,6 +152,15 @@ class PlaybackControllerTest {
         assertEquals(keys[2], loadedKey(sink.loads().single()))
     }
 
+    @Test fun start_navigationBeforeBundledReady_startupDoesNotOverride() = runTest {
+        libState.value = state(ready = false)
+        val c = controller()
+        c.start(); runCurrent()
+        c.select(keys[2]); advanceUntilIdle()
+        libState.value = state(ready = true); advanceUntilIdle()
+        assertEquals(keys[2], loadedKey(sink.loads().single()))
+    }
+
     @Test fun skip_navigationDuringPersist_keepsNewerPlayback() = runTest {
         val c = controller(); c.start(); advanceUntilIdle()
         val a = c.nowPlaying.value.ref!!.key

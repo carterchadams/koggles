@@ -87,10 +87,10 @@ class PlaybackController(
 
     /** D8: once bundled presets are ready (and, for a user last-key, up to 3 s for the user index). */
     fun start() {
+        // Navigation while startup waits wins: startup must not issue a newer request over it.
+        val before = playlist.latestRequestId
         scope.launch {
             applied.first { it?.bundledReady == true }
-            // Navigation while startup waits wins: startup must not issue a newer request over it.
-            val before = playlist.latestRequestId
             val lastKey = values.lastPresetKey
             if (lastKey != null && lastKey.startsWith("user:")) {
                 // Bundled readiness is published before the grant probe: wait for the probe, then
