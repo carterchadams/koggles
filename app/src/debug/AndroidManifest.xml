@@ -4,6 +4,7 @@
         <activity
             android:name=".debug.LoadGateActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.Koggles" />

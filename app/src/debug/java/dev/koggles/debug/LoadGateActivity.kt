@@ -25,6 +25,9 @@ import kotlin.concurrent.thread
  */
 class LoadGateActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
+
+    /** False once this gate stops; nothing it scheduled may load presets afterwards. */
+    @Volatile private var active = true
     private lateinit var view: VisualizerView
     private val commands get() = AppGraph.renderCommands
 
@@ -34,62 +37,111 @@ class LoadGateActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Same immersive window as MainActivity, so G4 measures the app's real surface size.
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
         view = VisualizerView(this)
         setContentView(view)
         val goggles = intent.getBooleanExtra("goggles", false)
         commands.setGoggles(goggles)
-        if (intent.getBooleanExtra("collision", false)) runCollision() else runCycle(goggles)
+        try {
+            if (intent.getBooleanExtra("collision", false)) runCollision() else runCycle(goggles)
+        } catch (e: java.io.IOException) {
+            // Inputs live in filesDir/g4 (adb-pushed files under Android/data are unreadable on API 37);
+            // see docs/verification/G4-rendering.md for the setup commands.
+            Log.e(TAG, "missing G4 inputs in ${File(filesDir, "g4")}: ${e.message}")
+            finish()
+        }
         main.postDelayed(::logStats, 10_000)
     }
 
     private fun runCycle(goggles: Boolean) {
         val files = File(filesDir, "g4")
-        val presets = File(files, "g4-presets.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() }
+        val paths = File(files, "g4-presets.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (paths.isEmpty()) throw java.io.IOException("g4-presets.txt lists no presets")
+        // Read every preset up front: missing inputs fail here, and no deferred I/O can throw later.
+        val presets = paths.map { path -> path to assets.open(path).bufferedReader().use { it.readText() } }
         thread {
             val bundledTextures = TextureInstaller(
                 AndroidAssetSource(assets),
                 filesDir,
                 packageManager.getPackageInfo(packageName, 0).lastUpdateTime,
             ).installIfNeeded()
-            val paths = if (bundledTextures.exists()) listOf(bundledTextures.absolutePath) else emptyList()
-            Log.i(TAG, "start mode=${if (goggles) "goggles" else "normal"} presets=${presets.size} textures=${bundledTextures.exists()}")
-            var i = 0
-            fun step() {
-                val path = presets[i % presets.size]
-                val data = assets.open(path).bufferedReader().use { it.readText() }
-                commands.loadPreset(data, nextRequestId(), true, paths)
-                Log.i(TAG, "preset ${i % presets.size}: $path")
-                i++
-                main.postDelayed(::step, 15_000)
-            }
-            main.post(::step)
+            main.postDelayed({
+                if (!active) return@postDelayed
+                if (!bundledTextures.isDirectory) {
+                    // projectM would substitute placeholder textures: a different workload, so no run.
+                    Log.e(TAG, "invalid gate: bundled textures unavailable at $bundledTextures")
+                    active = false
+                    main.removeCallbacksAndMessages(null)
+                    finish()
+                    return@postDelayed
+                }
+                val texturePaths = listOf(bundledTextures.absolutePath)
+                if (AppGraph.audio.snapshot.value.state != dev.koggles.audio.AudioState.Active) {
+                    // Without device audio the workload is lighter than G4 requires.
+                    Log.e(TAG, "invalid gate: audio not active (${AppGraph.audio.snapshot.value.state}); grant RECORD_AUDIO and play music")
+                    active = false
+                    main.removeCallbacksAndMessages(null)
+                    finish()
+                    return@postDelayed
+                }
+                Log.i(TAG, "start mode=${if (goggles) "goggles" else "normal"} presets=${presets.size} textures=$bundledTextures")
+                var i = 0
+                fun step() {
+                    if (!active) return
+                    val (path, data) = presets[i % presets.size]
+                    commands.loadPreset(data, nextRequestId(), true, texturePaths)
+                    Log.i(TAG, "preset ${i % presets.size}: $path")
+                    i++
+                    main.postDelayed(::step, 15_000)
+                }
+                step()
+            }, AUDIO_GRACE_MS)
         }
     }
 
     private fun runCollision() {
         val files = File(filesDir, "g4")
-        fun load(pack: String, file: String, smooth: Boolean) {
-            val dir = File(files, pack)
-            commands.loadPreset(File(dir, file).readText(), nextRequestId(), smooth, listOf(dir.absolutePath))
+        val a = File(files, "packA")
+        val b = File(files, "packB")
+        val aData = File(a, "a.milk").readText()
+        val bData = File(b, "b.milk").readText()
+        fun load(dir: File, data: String, smooth: Boolean) {
+            if (active) commands.loadPreset(data, nextRequestId(), smooth, listOf(dir.absolutePath))
         }
         Log.i(TAG, "phase=A")
-        load("packA", "a.milk", false)
-        main.postDelayed({ Log.i(TAG, "phase=blend-A-to-B"); load("packB", "b.milk", true) }, 5_000)
+        load(a, aData, false)
+        main.postDelayed({ Log.i(TAG, "phase=blend-A-to-B"); load(b, bData, true) }, 5_000)
         main.postDelayed({ Log.i(TAG, "phase=B") }, 8_000)
-        main.postDelayed({ Log.i(TAG, "phase=blend-B-to-A"); load("packA", "a.milk", true) }, 13_000)
+        main.postDelayed({ Log.i(TAG, "phase=blend-B-to-A"); load(a, aData, true) }, 13_000)
         main.postDelayed({ Log.i(TAG, "phase=A-again") }, 16_000)
     }
 
     private fun logStats() {
+        if (!active) return
         view.queueEvent {
             val h = commands.handleForCurrentThread()
             if (h != 0L) {
                 val s = NativeBridge.rendererFrameStats(h)
                 val thermal = getSystemService(PowerManager::class.java).currentThermalStatus
-                Log.i(TAG, "p50=%.2f p95=%.2f n=%d thermal=%d".format(s[0], s[1], s[2].toInt(), thermal))
+                Log.i(TAG, "p50=%.2f p95=%.2f n=%d thermal=%d rms=%.4f surface=%dx%d".format(
+                    s[0], s[1], s[2].toInt(), thermal, NativeBridge.recentRms(), view.width, view.height))
             }
         }
         main.postDelayed(::logStats, 10_000)
+    }
+
+    /** A new `am start` while a gate is running: end this run and start a fresh gate with the new extras. */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        active = false
+        main.removeCallbacksAndMessages(null)
+        finish()
+        startActivity(android.content.Intent(intent).setClass(this, LoadGateActivity::class.java))
     }
 
     override fun onStart() {
@@ -99,8 +151,12 @@ class LoadGateActivity : Activity() {
     }
 
     override fun onStop() {
+        // Only the visible gate may drive the process-wide renderer: a stopped gate ends its run.
+        active = false
+        main.removeCallbacksAndMessages(null)
         AppGraph.audio.dispatch(AudioEvent.ActivityStopped)
         super.onStop()
+        finish()
     }
 
     override fun onResume() {
@@ -120,5 +176,6 @@ class LoadGateActivity : Activity() {
 
     private companion object {
         const val TAG = "KogglesG4"
+        const val AUDIO_GRACE_MS = 5_000L
     }
 }
