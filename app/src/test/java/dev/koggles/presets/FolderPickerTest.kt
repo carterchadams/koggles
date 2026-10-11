@@ -47,4 +47,33 @@ class FolderPickerTest {
         assertSame(io, ranOn)
         assertEquals(1, refreshed)
     }
+
+    @Test fun overlappingPicks_serializedAndLatestWins() = runTest {
+        val firstGate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val acquired = mutableListOf<String>()
+        var active = 0
+        var maxActive = 0
+        var refreshed = 0
+        val picker = FolderPicker(
+            scope = this,
+            io = StandardTestDispatcher(testScheduler),
+            acquire = { uri ->
+                active++; maxActive = maxOf(maxActive, active)
+                if (uri == "first") firstGate.await()
+                acquired += uri
+                active--
+            },
+            onAcquired = { refreshed++ },
+            onFailed = {},
+        )
+        picker.picked("first")
+        testScheduler.runCurrent()
+        picker.picked("second")
+        testScheduler.runCurrent()
+        firstGate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("never two replacements at once", 1, maxActive)
+        assertEquals("second", acquired.last())
+        assertEquals("only the latest selection refreshes", 1, refreshed)
+    }
 }

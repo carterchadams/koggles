@@ -3,7 +3,10 @@ package dev.koggles.presets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -18,17 +21,29 @@ class FolderPicker(
     private val onAcquired: () -> Unit,
     private val onFailed: (String) -> Unit,
 ) {
+    /** Replacements run one at a time, in selection order (each enumerates and releases grants). */
+    private val lock = Mutex()
+    private val latest = AtomicLong(0)
+
     fun picked(uri: String) {
+        val mine = latest.incrementAndGet()
         scope.launch {
-            val result = try {
-                withContext(io) { acquire(uri) }
-                null
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                e
+            lock.withLock {
+                // A later selection supersedes this one: it will take its own grant and refresh.
+                if (mine != latest.get()) return@withLock
+                val failure = try {
+                    withContext(io) { acquire(uri) }
+                    null
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    e
+                }
+                when {
+                    failure != null -> onFailed("Couldn't use that folder: ${failure.message ?: failure.javaClass.simpleName}")
+                    mine == latest.get() -> onAcquired()
+                }
             }
-            if (result == null) onAcquired() else onFailed("Couldn't use that folder: ${result.message ?: result.javaClass.simpleName}")
         }
     }
 }
