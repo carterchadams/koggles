@@ -25,6 +25,9 @@ import kotlin.concurrent.thread
  */
 class LoadGateActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
+
+    /** False once this gate stops; nothing it scheduled may load presets afterwards. */
+    @Volatile private var active = true
     private lateinit var view: VisualizerView
     private val commands get() = AppGraph.renderCommands
 
@@ -51,43 +54,53 @@ class LoadGateActivity : Activity() {
 
     private fun runCycle(goggles: Boolean) {
         val files = File(filesDir, "g4")
-        val presets = File(files, "g4-presets.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() }
+        val paths = File(files, "g4-presets.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (paths.isEmpty()) throw java.io.IOException("g4-presets.txt lists no presets")
+        // Read every preset up front: missing inputs fail here, and no deferred I/O can throw later.
+        val presets = paths.map { path -> path to assets.open(path).bufferedReader().use { it.readText() } }
         thread {
             val bundledTextures = TextureInstaller(
                 AndroidAssetSource(assets),
                 filesDir,
                 packageManager.getPackageInfo(packageName, 0).lastUpdateTime,
             ).installIfNeeded()
-            val paths = if (bundledTextures.exists()) listOf(bundledTextures.absolutePath) else emptyList()
-            Log.i(TAG, "start mode=${if (goggles) "goggles" else "normal"} presets=${presets.size} textures=${bundledTextures.exists()}")
-            var i = 0
-            fun step() {
-                val path = presets[i % presets.size]
-                val data = assets.open(path).bufferedReader().use { it.readText() }
-                commands.loadPreset(data, nextRequestId(), true, paths)
-                Log.i(TAG, "preset ${i % presets.size}: $path")
-                i++
-                main.postDelayed(::step, 15_000)
+            val texturePaths = if (bundledTextures.exists()) listOf(bundledTextures.absolutePath) else emptyList()
+            main.post {
+                if (!active) return@post
+                Log.i(TAG, "start mode=${if (goggles) "goggles" else "normal"} presets=${presets.size} textures=${bundledTextures.exists()}")
+                var i = 0
+                fun step() {
+                    if (!active) return
+                    val (path, data) = presets[i % presets.size]
+                    commands.loadPreset(data, nextRequestId(), true, texturePaths)
+                    Log.i(TAG, "preset ${i % presets.size}: $path")
+                    i++
+                    main.postDelayed(::step, 15_000)
+                }
+                step()
             }
-            main.post(::step)
         }
     }
 
     private fun runCollision() {
         val files = File(filesDir, "g4")
-        fun load(pack: String, file: String, smooth: Boolean) {
-            val dir = File(files, pack)
-            commands.loadPreset(File(dir, file).readText(), nextRequestId(), smooth, listOf(dir.absolutePath))
+        val a = File(files, "packA")
+        val b = File(files, "packB")
+        val aData = File(a, "a.milk").readText()
+        val bData = File(b, "b.milk").readText()
+        fun load(dir: File, data: String, smooth: Boolean) {
+            if (active) commands.loadPreset(data, nextRequestId(), smooth, listOf(dir.absolutePath))
         }
         Log.i(TAG, "phase=A")
-        load("packA", "a.milk", false)
-        main.postDelayed({ Log.i(TAG, "phase=blend-A-to-B"); load("packB", "b.milk", true) }, 5_000)
+        load(a, aData, false)
+        main.postDelayed({ Log.i(TAG, "phase=blend-A-to-B"); load(b, bData, true) }, 5_000)
         main.postDelayed({ Log.i(TAG, "phase=B") }, 8_000)
-        main.postDelayed({ Log.i(TAG, "phase=blend-B-to-A"); load("packA", "a.milk", true) }, 13_000)
+        main.postDelayed({ Log.i(TAG, "phase=blend-B-to-A"); load(a, aData, true) }, 13_000)
         main.postDelayed({ Log.i(TAG, "phase=A-again") }, 16_000)
     }
 
     private fun logStats() {
+        if (!active) return
         view.queueEvent {
             val h = commands.handleForCurrentThread()
             if (h != 0L) {
@@ -99,6 +112,15 @@ class LoadGateActivity : Activity() {
         main.postDelayed(::logStats, 10_000)
     }
 
+    /** A new `am start` while a gate is running: end this run and start a fresh gate with the new extras. */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        active = false
+        main.removeCallbacksAndMessages(null)
+        finish()
+        startActivity(android.content.Intent(intent).setClass(this, LoadGateActivity::class.java))
+    }
+
     override fun onStart() {
         super.onStart()
         val granted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -106,8 +128,12 @@ class LoadGateActivity : Activity() {
     }
 
     override fun onStop() {
+        // Only the visible gate may drive the process-wide renderer: a stopped gate ends its run.
+        active = false
+        main.removeCallbacksAndMessages(null)
         AppGraph.audio.dispatch(AudioEvent.ActivityStopped)
         super.onStop()
+        finish()
     }
 
     override fun onResume() {
