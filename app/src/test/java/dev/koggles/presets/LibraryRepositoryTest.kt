@@ -224,4 +224,20 @@ class LibraryRepositoryTest {
         assertTrue("userTree() must not run on the scope's (main) thread", probeThread.get() !== scopeThread)
         mainLike.cancel(); single.shutdown()
     }
+
+    @Test fun refreshWithFailingRoot_dropsPreviousUserPacks() {
+        var failing = false
+        val flaky = object : DocTree by user {
+            override fun children(node: DocNode): List<DocNode> =
+                if (failing && node.id.isEmpty()) throw IOException("folder deleted") else user.children(node)
+        }
+        val r = repo(userTree = { flaky })
+        await(r, "user merged") { "user:Mine" in it.packIds() && !it.userIndexing }
+        failing = true
+        r.refresh()
+        val s = await(r, "dropped") { "user:Mine" !in it.packIds() && !it.userIndexing }
+        assertEquals(setOf("bundled:Cream"), s.packIds())
+        assertTrue(s.packTextureDirs.isEmpty())
+        assertTrue(s.errors.any { "folder deleted" in it })
+    }
 }

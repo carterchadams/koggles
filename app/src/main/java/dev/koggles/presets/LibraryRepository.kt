@@ -176,12 +176,17 @@ class LibraryRepository(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // e.g. the provider is unavailable or the grant was revoked: keep bundled presets.
+                // The folder is gone, unreadable or revoked (spec §7): hide user packs, keep bundled.
+                val stillGranted = runCatching { userTree() != null }.getOrDefault(false)
                 userLock.withLock {
                     if (generation == userGeneration) {
+                        publishedGeneration = generation
                         _state.update {
                             it.copy(
+                                catalog = Catalog(bundledPacks),
                                 userIndexing = false,
+                                hasGrant = stillGranted,
+                                packTextureDirs = emptyMap(),
                                 errors = bundledErrors + errors + "user folder: ${e.message}",
                             )
                         }
