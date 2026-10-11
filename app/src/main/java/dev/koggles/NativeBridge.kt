@@ -41,6 +41,9 @@ object NativeBridge {
     external fun rendererDrawFrame(h: Long)
     external fun rendererLoadPresetData(h: Long, data: String, requestId: Long, smooth: Boolean)
     external fun rendererLoadIdle(h: Long, requestId: Long)
+
+    /** Sets projectM's texture search paths; textures are reset only when the list changed. */
+    external fun rendererSetTextureSearchPaths(h: Long, paths: Array<String>)
     external fun rendererLastGlError(h: Long): Int
     external fun rendererSetGoggles(h: Long, on: Boolean)
     external fun rendererSetLens(h: Long, offsetMm: Float, distortion: Boolean, xdpi: Float)

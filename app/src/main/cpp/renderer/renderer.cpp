@@ -91,4 +91,16 @@ void Renderer::loadIdle(int64_t /*requestId*/) {
     projectm_load_preset_file(pm_, kIdlePresetUrl, false);
 }
 
+void Renderer::setTextureSearchPaths(const std::vector<std::string>& paths) {
+    if (pm_ == nullptr) return;
+    if (texturePathsSet_ && paths == texturePaths_) return;
+    std::vector<const char*> cpaths;
+    cpaths.reserve(paths.size());
+    for (const auto& p : paths) cpaths.push_back(p.c_str());
+    projectm_set_texture_search_paths(pm_, cpaths.data(), cpaths.size());
+    projectm_reset_textures(pm_);
+    texturePaths_ = paths;
+    texturePathsSet_ = true;
+}
+
 }  // namespace koggles

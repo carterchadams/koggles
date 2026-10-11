@@ -1,3 +1,8 @@
+import java.io.File
+import java.io.OutputStream
+import javax.inject.Inject
+import org.gradle.process.ExecOperations
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -39,6 +44,88 @@ tasks.matching {
         it.name.startsWith("buildCMake") ||
         it.name.startsWith("externalNativeBuild")
 }.configureEach { dependsOn(extractCardboardNative) }
+
+// Bundled content (Task 12, spec §5.1): pinned projectM preset and texture repos, laid out as
+// APK assets under assets/presets/, assets/textures/ and assets/licenses/.
+abstract class FetchBundledContent : DefaultTask() {
+    /** Repo name (the directory under [outputDir]) to clone URL. */
+    @get:Input abstract val urls: MapProperty<String, String>
+
+    /** Repo name to the commit SHA to check out. */
+    @get:Input abstract val shas: MapProperty<String, String>
+
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @get:Inject abstract val exec: ExecOperations
+
+    @TaskAction
+    fun fetch() {
+        val shaByRepo = shas.get()
+        for ((name, url) in urls.get()) {
+            val sha = shaByRepo.getValue(name)
+            val dir = outputDir.get().asFile.resolve(name)
+            val haveSha = dir.resolve(".git").isDirectory &&
+                git(dir, "cat-file", "-e", "$sha^{commit}", ignoreExit = true) == 0
+            if (!haveSha) {
+                dir.deleteRecursively()
+                git(outputDir.get().asFile, "clone", "--quiet", "--filter=blob:none", "--no-checkout", url, name)
+            }
+            git(dir, "-c", "advice.detachedHead=false", "checkout", "--quiet", "--force", sha)
+            git(dir, "clean", "-dffxq")
+        }
+    }
+
+    private fun git(workDir: File, vararg args: String, ignoreExit: Boolean = false): Int =
+        exec.exec {
+            workingDir = workDir
+            commandLine(listOf("git") + args)
+            isIgnoreExitValue = ignoreExit
+            if (ignoreExit) errorOutput = OutputStream.nullOutputStream()
+        }.exitValue
+}
+
+val bundledContentDir = layout.buildDirectory.dir("content")
+val bundledAssetsDir = layout.buildDirectory.dir("generated/bundled")
+
+val fetchBundledContent by tasks.registering(FetchBundledContent::class) {
+    description = "Clones the pinned bundled preset and texture repos into build/content/."
+    urls.put("presets-cream-of-the-crop", "https://github.com/projectM-visualizer/presets-cream-of-the-crop")
+    urls.put("presets-milkdrop-texture-pack", "https://github.com/projectM-visualizer/presets-milkdrop-texture-pack")
+    shas.put("presets-cream-of-the-crop", libs.versions.cotcSha.get())
+    shas.put("presets-milkdrop-texture-pack", libs.versions.texturePackSha.get())
+    outputDir.set(bundledContentDir)
+}
+
+val syncBundledContent by tasks.registering(Sync::class) {
+    description = "Lays out the fetched content as assets in build/generated/bundled/."
+    val textureExt = setOf("jpg", "jpeg", "png", "tga", "bmp", "dds") // = presets.TEXTURE_EXT
+    val cotc = fetchBundledContent.flatMap { it.outputDir.dir("presets-cream-of-the-crop") }
+    val pack = fetchBundledContent.flatMap { it.outputDir.dir("presets-milkdrop-texture-pack") }
+    from(cotc) {
+        include { it.isDirectory || it.name.substringAfterLast('.', "").lowercase() == "milk" }
+        exclude("**/.git/**")
+        into("presets/Cream of the Crop")
+    }
+    from(pack.map { it.dir("textures") }) {
+        include { it.isDirectory || it.name.substringAfterLast('.', "").lowercase() in textureExt }
+        eachFile { path = "textures/$name" }
+    }
+    from(cotc) {
+        include("LICENSE.md", "README.md")
+        rename { "cream-of-the-crop-$it" }
+        into("licenses")
+    }
+    from(pack) {
+        include("LICENSE.md", "README.md")
+        rename { "milkdrop-texture-pack-$it" }
+        into("licenses")
+    }
+    includeEmptyDirs = false
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    into(bundledAssetsDir)
+}
+
+tasks.named("preBuild") { dependsOn(syncBundledContent) }
 
 android {
     namespace = "dev.koggles"
@@ -87,6 +174,12 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+
+    sourceSets {
+        getByName("main") {
+            assets.srcDir("build/generated/bundled") // = bundledAssetsDir
+        }
     }
 
     packaging {
