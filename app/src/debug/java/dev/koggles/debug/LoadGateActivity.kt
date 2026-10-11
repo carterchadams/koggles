@@ -37,6 +37,12 @@ class LoadGateActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Same immersive window as MainActivity, so G4 measures the app's real surface size.
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
         view = VisualizerView(this)
         setContentView(view)
         val goggles = intent.getBooleanExtra("goggles", false)
@@ -122,7 +128,8 @@ class LoadGateActivity : Activity() {
             if (h != 0L) {
                 val s = NativeBridge.rendererFrameStats(h)
                 val thermal = getSystemService(PowerManager::class.java).currentThermalStatus
-                Log.i(TAG, "p50=%.2f p95=%.2f n=%d thermal=%d rms=%.4f".format(s[0], s[1], s[2].toInt(), thermal, NativeBridge.recentRms()))
+                Log.i(TAG, "p50=%.2f p95=%.2f n=%d thermal=%d rms=%.4f surface=%dx%d".format(
+                    s[0], s[1], s[2].toInt(), thermal, NativeBridge.recentRms(), view.width, view.height))
             }
         }
         main.postDelayed(::logStats, 10_000)

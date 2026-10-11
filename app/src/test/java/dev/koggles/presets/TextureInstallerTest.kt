@@ -192,4 +192,28 @@ class TextureInstallerTest {
         assertFalse(dir.exists())
         assertFalse(File(base, "current").exists())
     }
+
+    @Test
+    fun concurrentInstalls_areSerialized_andPublishCompleteDirectory() {
+        // A slow source: each open sleeps, so unsynchronized installers would interleave.
+        class SlowSource : AssetSource {
+            val active = java.util.concurrent.atomic.AtomicInteger(0)
+            val maxActive = java.util.concurrent.atomic.AtomicInteger(0)
+            override fun list(path: String) = if (path == "textures") arrayOf("a.jpg", "b.png") else emptyArray()
+            override fun open(path: String): InputStream {
+                val now = active.incrementAndGet()
+                maxActive.accumulateAndGet(now) { a, b -> maxOf(a, b) }
+                Thread.sleep(50)
+                active.decrementAndGet()
+                return ByteArrayInputStream(byteArrayOf(7))
+            }
+        }
+        val src = SlowSource()
+        val results = java.util.Collections.synchronizedList(mutableListOf<File>())
+        val threads = (1..4).map { kotlin.concurrent.thread { results += TextureInstaller(src, filesDir, 3).installIfNeeded() } }
+        threads.forEach { it.join() }
+        assertEquals("never two extractions at once", 1, src.maxActive.get())
+        assertTrue(results.all { it == results.first() })
+        assertTrue(File(results.first(), "a.jpg").isFile && File(results.first(), "b.png").isFile)
+    }
 }

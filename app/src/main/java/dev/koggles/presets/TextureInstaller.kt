@@ -35,7 +35,9 @@ class TextureInstaller(
      * active one. With no previous version and a failure it returns a directory that does not
      * exist, which callers treat as "no bundled textures".
      */
-    fun installIfNeeded(): File {
+    fun installIfNeeded(): File = synchronized(INSTALL_LOCK) { installLocked() }
+
+    private fun installLocked(): File {
         val target = "v$versionKey"
         val finalDir = File(base, target)
         val previous = activeDir()
@@ -102,3 +104,6 @@ class TextureInstaller(
         private val VERSION_NAME = Regex("v-?\\d+")
     }
 }
+
+/** One install at a time per process: installs share staging and pointer files. */
+private val INSTALL_LOCK = Any()
