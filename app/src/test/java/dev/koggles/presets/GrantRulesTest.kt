@@ -30,4 +30,33 @@ class GrantRulesTest {
         )
         assertEquals(listOf("b"), released)
     }
+
+    // R2.2 gate 4: the choice must be durably recorded before anything is released.
+    @Test fun recordFails_undoesNewGrant_releasesNothing_throws() {
+        val events = mutableListOf<String>()
+        assertThrows(IOException::class.java) {
+            GrantRules.replace(
+                take = {
+                    GrantRules.takeAndRecord(
+                        take = { events += "take" },
+                        record = { events += "record"; false },
+                        untake = { events += "untake" },
+                    )
+                },
+                others = listOf("old"),
+                release = { events += "release:$it" },
+            )
+        }
+        assertEquals(listOf("take", "record", "untake"), events)
+    }
+
+    @Test fun recordSucceeds_thenOthersReleased() {
+        val events = mutableListOf<String>()
+        GrantRules.replace(
+            take = { GrantRules.takeAndRecord({ events += "take" }, { events += "record"; true }, { events += "untake" }) },
+            others = listOf("old"),
+            release = { events += "release:$it" },
+        )
+        assertEquals(listOf("take", "record", "release:old"), events)
+    }
 }

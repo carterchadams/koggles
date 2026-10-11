@@ -24,6 +24,23 @@ object GrantRules {
     }
 
     /**
+     * Takes a new grant and durably [record]s it as the active folder. If recording fails, the new
+     * grant is undone ([untake], best effort) and [IOException] is thrown, so the caller releases
+     * nothing and the previous folder stays the active one.
+     */
+    fun takeAndRecord(take: () -> Unit, record: () -> Boolean, untake: () -> Unit) {
+        take()
+        if (!record()) {
+            try {
+                untake()
+            } catch (e: Exception) {
+                // Best effort: a stray extra grant is harmless, [pick] only honours the active one.
+            }
+            throw java.io.IOException("couldn't save the folder choice")
+        }
+    }
+
+    /**
      * Grant replacement: [take] the new grant first. If that throws, nothing is released and the
      * error propagates, so the previous folder stays usable. Then release [others]; a release that
      * fails (already gone) is ignored.
@@ -73,8 +90,14 @@ class FolderGrant(context: Context) {
         val picked = Uri.parse(uri)
         GrantRules.replace(
             take = {
-                resolver.takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                prefs.edit().putString(KEY_ACTIVE, uri).commit()
+                val alreadyHeld = resolver.persistedUriPermissions.any { it.uri == picked && it.isReadPermission }
+                GrantRules.takeAndRecord(
+                    take = { resolver.takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION) },
+                    record = { prefs.edit().putString(KEY_ACTIVE, uri).commit() },
+                    untake = {
+                        if (!alreadyHeld) resolver.releasePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    },
+                )
             },
             others = resolver.persistedUriPermissions.filter { it.uri != picked },
             release = { p ->
