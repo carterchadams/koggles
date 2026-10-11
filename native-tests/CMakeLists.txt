@@ -22,7 +22,11 @@ file(GLOB CORE_SOURCES CONFIGURE_DEPENDS ${CORE_DIR}/*.cpp)
 
 # Core sources are compiled into each executable directly, so the TSAN
 # executable gets instrumented copies of them.
-add_executable(core_tests audio_window_test.cpp ${CORE_SOURCES})
+add_executable(core_tests
+  audio_window_test.cpp
+  device_params_test.cpp
+  eye_layout_test.cpp
+  ${CORE_SOURCES})
 target_include_directories(core_tests PRIVATE ${CORE_DIR})
 target_link_libraries(core_tests PRIVATE GTest::gtest_main)
 gtest_discover_tests(core_tests)
