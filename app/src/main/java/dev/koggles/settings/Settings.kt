@@ -47,7 +47,8 @@ fun SettingsValues.clamped(): SettingsValues = copy(
 class Settings(private val store: DataStore<Preferences>) {
     val values: Flow<SettingsValues> = store.data.orEmptyOnIoError().map(::read).distinctUntilChanged()
 
-    suspend fun update(f: (SettingsValues) -> SettingsValues) {
+    /** Applies [f] (clamped) and persists it; returns false if the write failed. */
+    suspend fun update(f: (SettingsValues) -> SettingsValues): Boolean = persist("settings") {
         store.edit { prefs ->
             val next = f(read(prefs)).clamped()
             prefs[K.presetDurationSec] = next.presetDurationSec

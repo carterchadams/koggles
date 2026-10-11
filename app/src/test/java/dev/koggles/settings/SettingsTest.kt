@@ -119,4 +119,15 @@ class SettingsTest {
             Scope.PackOnly("user:p|q"),
         )) assertEquals(scope, decodeScope(scope.encode()))
     }
+
+    @Test fun writeIOException_isContainedAndReported() = runBlocking {
+        val failing = object : DataStore<Preferences> {
+            override val data: kotlinx.coroutines.flow.Flow<Preferences> =
+                kotlinx.coroutines.flow.flowOf(androidx.datastore.preferences.core.emptyPreferences())
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
+                throw java.io.IOException("disk full")
+        }
+        assertEquals(false, Settings(failing).update { it.copy(explainerSeen = true) })
+        assertEquals(false, dev.koggles.presets.PresetLibrary(failing).setSkipped("k", true))
+    }
 }

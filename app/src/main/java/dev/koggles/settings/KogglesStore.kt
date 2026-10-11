@@ -24,3 +24,15 @@ object KogglesStore {
 /** Reads that fail with an IOException yield empty preferences (defaults) instead of failing. */
 internal fun Flow<Preferences>.orEmptyOnIoError(): Flow<Preferences> =
     catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+
+/**
+ * Runs a preferences write; an IOException (full disk, unwritable file) is logged and reported
+ * as `false` instead of propagating into callers' coroutines.
+ */
+internal suspend fun persist(what: String, write: suspend () -> Unit): Boolean = try {
+    write()
+    true
+} catch (e: IOException) {
+    runCatching { android.util.Log.w("KogglesStore", "failed to save $what", e) }
+    false
+}

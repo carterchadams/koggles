@@ -1,6 +1,7 @@
 package dev.koggles.presets
 
 import dev.koggles.settings.orEmptyOnIoError
+import dev.koggles.settings.persist
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -22,7 +23,7 @@ class PresetLibrary(private val store: DataStore<Preferences>) {
 
     suspend fun setPackEnabled(id: String, on: Boolean) = mark(DISABLED, id, !on)
 
-    suspend fun toggleFavorite(key: String) {
+    suspend fun toggleFavorite(key: String): Boolean = persist("favorites") {
         store.edit { p ->
             val cur = p[FAVORITES].orEmpty()
             p[FAVORITES] = if (key in cur) cur - key else cur + key
@@ -31,7 +32,7 @@ class PresetLibrary(private val store: DataStore<Preferences>) {
 
     suspend fun setSkipped(key: String, on: Boolean) = mark(SKIPPED, key, on)
 
-    private suspend fun mark(k: Preferences.Key<Set<String>>, item: String, present: Boolean) {
+    private suspend fun mark(k: Preferences.Key<Set<String>>, item: String, present: Boolean): Boolean = persist(k.name) {
         store.edit { p ->
             val cur = p[k].orEmpty()
             p[k] = if (present) cur + item else cur - item
