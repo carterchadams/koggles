@@ -41,4 +41,29 @@ class NativeLoadTest {
             assertEquals(0, glError.get())
         }
     }
+
+    @Test
+    fun readinessFiresAgainAfterEglContextLoss() {
+        val readyCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val first = CountDownLatch(1)
+        val second = CountDownLatch(2)
+        lateinit var view: VisualizerView
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                view = VisualizerView(activity)
+                view.preserveEGLContextOnPause = false // force context loss on pause
+                view.onRendererReady = {
+                    readyCount.incrementAndGet()
+                    first.countDown()
+                    second.countDown()
+                }
+                activity.setContentView(view)
+            }
+            assertTrue("first ready", first.await(10, SECONDS))
+            scenario.onActivity { view.onPause() }
+            scenario.onActivity { view.onResume() }
+            assertTrue("ready again after context loss", second.await(10, SECONDS))
+            assertEquals(2, readyCount.get())
+        }
+    }
 }

@@ -25,6 +25,7 @@ class VisualizerView(context: Context) : GLSurfaceView(context) {
                     handle = 0L
                 }
                 handle = NativeBridge.rendererCreate()
+                sized = false // readiness fires again for every new context
             }
 
             override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
