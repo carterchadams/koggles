@@ -40,6 +40,7 @@ class GrantRulesTest {
                     GrantRules.takeAndRecord(
                         take = { events += "take" },
                         record = { events += "record"; false },
+                        restore = { events += "restore" },
                         untake = { events += "untake" },
                     )
                 },
@@ -47,16 +48,33 @@ class GrantRulesTest {
                 release = { events += "release:$it" },
             )
         }
-        assertEquals(listOf("take", "record", "untake"), events)
+        assertEquals(listOf("take", "record", "restore", "untake"), events)
     }
 
     @Test fun recordSucceeds_thenOthersReleased() {
         val events = mutableListOf<String>()
         GrantRules.replace(
-            take = { GrantRules.takeAndRecord({ events += "take" }, { events += "record"; true }, { events += "untake" }) },
+            take = { GrantRules.takeAndRecord({ events += "take" }, { events += "record"; true }, { events += "restore" }, { events += "untake" }) },
             others = listOf("old"),
             release = { events += "release:$it" },
         )
         assertEquals(listOf("take", "record", "release:old"), events)
+    }
+
+    // Gate 5: SharedPreferences.commit() changes memory even when the disk write fails.
+    @Test fun recordMutatesThenFails_previousActiveRestored() {
+        var active: String? = "content://A"
+        val previous = active
+        assertThrows(IOException::class.java) {
+            GrantRules.takeAndRecord(
+                take = {},
+                record = { active = "content://B"; false },
+                restore = { active = previous },
+                untake = {},
+            )
+        }
+        assertEquals("content://A", active)
+        val grants = listOf(PersistedGrant("content://A", read = true))
+        assertEquals("content://A", GrantRules.pick(grants, active = active) { true })
     }
 }

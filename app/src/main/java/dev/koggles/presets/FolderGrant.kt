@@ -24,13 +24,15 @@ object GrantRules {
     }
 
     /**
-     * Takes a new grant and durably [record]s it as the active folder. If recording fails, the new
-     * grant is undone ([untake], best effort) and [IOException] is thrown, so the caller releases
-     * nothing and the previous folder stays the active one.
+     * Takes a new grant and durably [record]s it as the active folder. If recording fails, the
+     * previous record is put back ([restore]; a failed `commit()` may already have changed it in
+     * memory), the new grant is undone ([untake], best effort), and [IOException] is thrown, so the
+     * caller releases nothing and the previous folder stays the active one.
      */
-    fun takeAndRecord(take: () -> Unit, record: () -> Boolean, untake: () -> Unit) {
+    fun takeAndRecord(take: () -> Unit, record: () -> Boolean, restore: () -> Unit, untake: () -> Unit) {
         take()
         if (!record()) {
+            restore()
             try {
                 untake()
             } catch (e: Exception) {
@@ -62,13 +64,18 @@ class FolderGrant(context: Context) {
 
     private val resolver = context.applicationContext.contentResolver
 
+    /** Guards the active record across a whole replacement (take, record, rollback, release). */
+    private val lock = Any()
+
     /** The URI the user chose last; survives restarts. */
     private val prefs = context.applicationContext.getSharedPreferences("folder_grant", Context.MODE_PRIVATE)
 
     /** The granted tree if a readable grant exists and its root document still answers. */
     fun currentTree(): SafDocTree? {
         val grants = resolver.persistedUriPermissions.map { PersistedGrant(it.uri.toString(), it.isReadPermission) }
-        val picked = GrantRules.pick(grants, prefs.getString(KEY_ACTIVE, null), ::probe) ?: return null
+        // Never observes a replacement half-way (e.g. a rejected record before its rollback).
+        val active = synchronized(lock) { prefs.getString(KEY_ACTIVE, null) }
+        val picked = GrantRules.pick(grants, active, ::probe) ?: return null
         return SafDocTree(resolver, Uri.parse(picked))
     }
 
@@ -86,14 +93,20 @@ class FolderGrant(context: Context) {
      * off the main thread. Throws (e.g. [SecurityException]) when the grant cannot be taken, leaving
      * existing grants untouched.
      */
-    fun onTreePicked(uri: String) {
+    fun onTreePicked(uri: String) = synchronized(lock) {
         val picked = Uri.parse(uri)
         GrantRules.replace(
             take = {
                 val alreadyHeld = resolver.persistedUriPermissions.any { it.uri == picked && it.isReadPermission }
+                val previousActive = prefs.getString(KEY_ACTIVE, null)
                 GrantRules.takeAndRecord(
                     take = { resolver.takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION) },
                     record = { prefs.edit().putString(KEY_ACTIVE, uri).commit() },
+                    restore = {
+                        val e = prefs.edit()
+                        if (previousActive == null) e.remove(KEY_ACTIVE) else e.putString(KEY_ACTIVE, previousActive)
+                        e.commit()
+                    },
                     untake = {
                         if (!alreadyHeld) resolver.releasePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     },
