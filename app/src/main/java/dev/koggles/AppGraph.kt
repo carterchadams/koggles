@@ -1,6 +1,7 @@
 package dev.koggles
 
 import dev.koggles.audio.AudioSession
+import dev.koggles.audio.PlaybackCaptureSource
 import dev.koggles.audio.Source
 import dev.koggles.audio.UnavailableSource
 import dev.koggles.audio.VisualizerSource
@@ -25,10 +26,11 @@ object AppGraph {
         this.app = app
         renderCommands = RenderCommands(NativeRendererPort(app.resources.displayMetrics.xdpi))
         audio = AudioSession(
-            factory = { source, _, _ ->
+            factory = { source, consent, generation ->
                 when (source) {
                     Source.Standard -> VisualizerSource()
-                    Source.HighQuality -> UnavailableSource() // Task 8
+                    Source.HighQuality ->
+                        if (consent != null) PlaybackCaptureSource(app, consent, generation) else UnavailableSource()
                 }
             },
             flush = { NativeBridge.flushAudio() },

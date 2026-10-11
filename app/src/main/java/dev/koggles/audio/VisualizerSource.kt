@@ -74,7 +74,7 @@ class VisualizerSource(private val create: () -> VisualizerApi = ::AndroidVisual
     }
 }
 
-/** Placeholder until Task 8 adds playback capture: fails immediately. */
+/** Fails immediately; used when High quality is started without a consent result. */
 class UnavailableSource : AudioSource {
     override fun start(listener: AudioSourceListener) = listener.onFailed(FailReason.CaptureStartFailed)
     override fun stop() = Unit

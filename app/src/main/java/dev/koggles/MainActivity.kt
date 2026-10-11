@@ -3,6 +3,7 @@ package dev.koggles
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -26,6 +27,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.koggles.audio.AudioEffect
 import dev.koggles.audio.AudioEvent
 import dev.koggles.audio.AudioState
+import dev.koggles.audio.ConsentData
 import dev.koggles.audio.Source
 import dev.koggles.render.VisualizerView
 import dev.koggles.ui.AudioErrorScreen
@@ -45,9 +47,23 @@ class MainActivity : ComponentActivity() {
         audio.dispatch(AudioEvent.PermissionResult(granted, permanent))
     }
 
+    /** Request id of the consent dialog in flight; survives activity recreation. */
+    private var consentRequestId = 0L
+
+    private val consentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        val consent = if (result.resultCode == RESULT_OK && data != null) ConsentData(result.resultCode, data) else null
+        audio.provideConsent(consentRequestId, consent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putLong(KEY_CONSENT_REQUEST, consentRequestId)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        DebugHooks.install(this)
+        consentRequestId = savedInstanceState?.getLong(KEY_CONSENT_REQUEST) ?: 0L
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -59,6 +75,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         val view = VisualizerView(this).also { visualizerView = it }
+        DebugHooks.install(this)
         setContent {
             val snapshot by audio.snapshot.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize()) {
@@ -88,7 +105,10 @@ class MainActivity : ComponentActivity() {
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
             )
             AudioEffect.ShowExplainer -> Unit // rendered from AudioState.ShowingExplainer
-            is AudioEffect.LaunchConsent -> Unit // Task 8
+            is AudioEffect.LaunchConsent -> {
+                consentRequestId = effect.requestId
+                consentLauncher.launch(getSystemService(MediaProjectionManager::class.java).createScreenCaptureIntent())
+            }
             else -> Unit
         }
     }
@@ -113,5 +133,9 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         visualizerView?.onPause()
         super.onPause()
+    }
+
+    private companion object {
+        const val KEY_CONSENT_REQUEST = "consentRequestId"
     }
 }

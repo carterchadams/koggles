@@ -6,6 +6,7 @@ object DebugHooks {
 
     fun install(activity: MainActivity) {
         appContext = activity.applicationContext
+        activity.visualizerView?.let { dev.koggles.debug.DebugSourceToggle.install(it) }
     }
 
     /** GL thread. G1: autoload the probe preset with requestId 1 (removed in Task 19). */
