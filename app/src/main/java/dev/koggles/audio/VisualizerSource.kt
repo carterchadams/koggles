@@ -3,30 +3,61 @@ package dev.koggles.audio
 import android.media.audiofx.Visualizer
 import dev.koggles.NativeBridge
 
-/** "Standard" source: the output mix (session 0) via [Visualizer] waveform capture. */
-class VisualizerSource : AudioSource {
-    private var visualizer: Visualizer? = null
+/** The subset of [Visualizer] the source uses; every setter returns a Visualizer status code. */
+interface VisualizerApi {
+    val maxCaptureSize: Int
+    val maxCaptureRate: Int
+    fun setCaptureSize(size: Int): Int
+    fun setWaveformListener(rate: Int, onWaveform: (ByteArray) -> Unit): Int
+    fun setEnabled(enabled: Boolean): Int
+    fun release()
+
+    companion object {
+        const val SUCCESS = 0 // Visualizer.SUCCESS
+    }
+}
+
+/** Output mix (session 0). Construction may throw on devices that don't support it. */
+class AndroidVisualizer : VisualizerApi {
+    private val v = Visualizer(0)
+    override val maxCaptureSize get() = Visualizer.getCaptureSizeRange()[1]
+    override val maxCaptureRate get() = Visualizer.getMaxCaptureRate()
+    override fun setCaptureSize(size: Int) = v.setCaptureSize(size)
+    override fun setWaveformListener(rate: Int, onWaveform: (ByteArray) -> Unit) = v.setDataCaptureListener(
+        object : Visualizer.OnDataCaptureListener {
+            override fun onWaveFormDataCapture(vis: Visualizer?, waveform: ByteArray, samplingRate: Int) = onWaveform(waveform)
+            override fun onFftDataCapture(vis: Visualizer?, fft: ByteArray?, samplingRate: Int) = Unit
+        },
+        rate,
+        true,
+        false,
+    )
+    override fun setEnabled(enabled: Boolean) = v.setEnabled(enabled)
+    override fun release() = v.release()
+}
+
+/**
+ * "Standard" source: the output mix via [Visualizer] waveform capture. Reports started only
+ * after every setup call returns SUCCESS; any exception or error code means the Visualizer is
+ * unavailable on this device.
+ */
+class VisualizerSource(private val create: () -> VisualizerApi = ::AndroidVisualizer) : AudioSource {
+    private var visualizer: VisualizerApi? = null
 
     override fun start(listener: AudioSourceListener) {
-        try {
-            val v = Visualizer(0)
-            visualizer = v
-            v.captureSize = Visualizer.getCaptureSizeRange()[1]
-            v.setDataCaptureListener(
-                object : Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(vis: Visualizer?, waveform: ByteArray, samplingRate: Int) {
-                        NativeBridge.pushPcmU8(waveform, waveform.size)
-                    }
-
-                    override fun onFftDataCapture(vis: Visualizer?, fft: ByteArray?, samplingRate: Int) = Unit
-                },
-                Visualizer.getMaxCaptureRate(),
-                true,
-                false,
-            )
-            v.enabled = true
-            listener.onStarted()
+        val ok = try {
+            val v = create().also { visualizer = it }
+            v.setCaptureSize(v.maxCaptureSize) == VisualizerApi.SUCCESS &&
+                v.setWaveformListener(v.maxCaptureRate) { waveform ->
+                    NativeBridge.pushPcmU8(waveform, waveform.size)
+                } == VisualizerApi.SUCCESS &&
+                v.setEnabled(true) == VisualizerApi.SUCCESS
         } catch (e: RuntimeException) {
+            false
+        }
+        if (ok) {
+            listener.onStarted()
+        } else {
             release()
             listener.onFailed(FailReason.VisualizerUnavailable)
         }
@@ -36,7 +67,7 @@ class VisualizerSource : AudioSource {
 
     private fun release() {
         visualizer?.let {
-            runCatching { it.enabled = false }
+            runCatching { it.setEnabled(false) }
             it.release()
         }
         visualizer = null
