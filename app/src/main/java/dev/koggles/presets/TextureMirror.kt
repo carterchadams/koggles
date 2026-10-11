@@ -50,13 +50,19 @@ class TextureMirror(
             val name = node.name
             if (!isSafeName(name) || name in winners) collisions += relPath else winners[name] = node
         }
+        val complete = pack.readErrors.isEmpty()
         val copy = winners.filter { (name, node) ->
             val e = manifest.files[name]
-            !dirExists || e == null || e.source != pack.tree.sourceId(node) ||
-                e.size != node.size || e.lastModified != node.lastModified
+            val source = pack.tree.sourceId(node)
+            when {
+                !dirExists || e == null -> true
+                // An incomplete scan may be missing the real winner: never swap a cached file's source.
+                e.source != source -> complete
+                else -> e.size != node.size || e.lastModified != node.lastModified
+            }
         }.map { (name, node) -> node to name }
         // A scan with read errors is incomplete: absence is not proof of deletion, so keep the cache.
-        val delete = if (pack.readErrors.isNotEmpty()) emptyList()
+        val delete = if (!complete) emptyList()
         else manifest.files.keys.filter { it !in winners }.sorted()
         return MirrorPlan(copy, delete, collisions, winners.keys)
     }

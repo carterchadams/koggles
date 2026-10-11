@@ -233,4 +233,16 @@ class TextureMirrorTest {
         mirror().apply(pack("user:p", a))
         assertEquals(listOf(a.id), copied)
     }
+
+    @Test
+    fun incompleteScan_doesNotSwapCachedWinnerSource() {
+        val first = node("a/tex.png")
+        val later = node("z/tex.png", size = 9)
+        val dir = mirror().apply(pack("user:p", first, later)) // a/tex.png wins
+        copied.clear()
+        // a/ unreadable now: only z/tex.png is visible, with a read error.
+        mirror().apply(pack("user:p", later).copy(readErrors = listOf("a: unreadable")))
+        assertEquals(emptyList<String>(), copied)
+        assertTrue(File(dir, "tex.png").isFile)
+    }
 }
