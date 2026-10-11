@@ -26,11 +26,14 @@ import kotlin.concurrent.thread
 class LoadGateActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private lateinit var view: VisualizerView
-    private var nextRequestId = 1_000_000L
     private val commands get() = AppGraph.renderCommands
+
+    /** Request ids must stay above whatever RenderCommands (process-scoped) has accepted. */
+    private fun nextRequestId(): Long = (commands.state.value.preset?.requestId ?: 0L) + 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         view = VisualizerView(this)
         setContentView(view)
         val goggles = intent.getBooleanExtra("goggles", false)
@@ -54,7 +57,7 @@ class LoadGateActivity : Activity() {
             fun step() {
                 val path = presets[i % presets.size]
                 val data = assets.open(path).bufferedReader().use { it.readText() }
-                commands.loadPreset(data, nextRequestId++, true, paths)
+                commands.loadPreset(data, nextRequestId(), true, paths)
                 Log.i(TAG, "preset ${i % presets.size}: $path")
                 i++
                 main.postDelayed(::step, 15_000)
@@ -67,7 +70,7 @@ class LoadGateActivity : Activity() {
         val files = File(filesDir, "g4")
         fun load(pack: String, file: String, smooth: Boolean) {
             val dir = File(files, pack)
-            commands.loadPreset(File(dir, file).readText(), nextRequestId++, smooth, listOf(dir.absolutePath))
+            commands.loadPreset(File(dir, file).readText(), nextRequestId(), smooth, listOf(dir.absolutePath))
         }
         Log.i(TAG, "phase=A")
         load("packA", "a.milk", false)
