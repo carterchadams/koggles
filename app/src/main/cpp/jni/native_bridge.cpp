@@ -8,6 +8,7 @@
 #include <string>
 
 #include "../renderer/engine.h"
+#include "../renderer/goggles.h"
 #include "../renderer/renderer.h"
 
 using koggles::Engine;
@@ -23,6 +24,20 @@ extern "C" {
 JNIEXPORT void JNICALL
 Java_dev_koggles_NativeBridge_nativeInit(JNIEnv*, jobject) {
     Engine::instance();
+}
+
+// Main thread, once per process from KogglesApp.onCreate, with a display context derived from
+// the Application (Cardboard retains it and calls getDisplay() on it).
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_cardboardInit(JNIEnv* env, jobject, jobject appContext) {
+    JavaVM* vm = nullptr;
+    if (appContext == nullptr || env->GetJavaVM(&vm) != JNI_OK) return;
+    koggles::cardboardInitAndroid(vm, appContext);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_dev_koggles_NativeBridge_cardboardLensProbe(JNIEnv*, jobject, jint width, jint height) {
+    return koggles::cardboardLensProbe(width, height) ? JNI_TRUE : JNI_FALSE;
 }
 
 // Reads `frames` stereo frames from the start of the direct buffer (its position is ignored).

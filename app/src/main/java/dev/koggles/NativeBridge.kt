@@ -7,6 +7,16 @@ object NativeBridge {
     }
 
     external fun nativeInit()
+    /**
+     * Once per process, with a display context derived from the Application (never an Activity):
+     * the SDK keeps a JNI global reference to the
+     * context it is given, so passing an Activity would pin it. The QR scanner is launched from
+     * Kotlin with an Activity instead of through the SDK.
+     */
+    external fun cardboardInit(appContext: android.content.Context)
+
+    /** Diagnostic: creates and destroys a Cardboard lens distortion for the default viewer. */
+    external fun cardboardLensProbe(width: Int, height: Int): Boolean
 
     /**
      * Any thread. [buf] must be a direct buffer of stereo interleaved floats; [frames] frames are

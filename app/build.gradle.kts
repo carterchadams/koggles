@@ -5,6 +5,41 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Cardboard SDK: built from the pinned submodule with its own Gradle wrapper.
+val cardboardDir = rootProject.file("third_party/cardboard")
+val cardboardAar = rootProject.file("third_party/cardboard/sdk/build/outputs/aar/sdk-release.aar")
+
+val buildCardboardSdk by tasks.registering(Exec::class) {
+    description = "Builds the Cardboard SDK AAR from third_party/cardboard."
+    workingDir = cardboardDir
+    commandLine("./gradlew", ":sdk:assembleRelease")
+    inputs.files(
+        fileTree(cardboardDir) {
+            include("build.gradle", "settings.gradle", "gradle.properties", "gradle/**", "proto/**", "java_api/**", "sdk/**")
+            exclude("**/build/**", "**/.cxx/**", "**/.gradle/**")
+        },
+    ).withPropertyName("cardboardSources")
+    outputs.file(cardboardAar).withPropertyName("cardboardAar")
+}
+
+val extractCardboardNative by tasks.registering(Copy::class) {
+    description = "Extracts libGfxPluginCardboard.so from the Cardboard AAR for CMake to link."
+    dependsOn(buildCardboardSdk)
+    from(zipTree(cardboardAar)) {
+        include("jni/arm64-v8a/libGfxPluginCardboard.so")
+        eachFile { path = name }
+        includeEmptyDirs = false
+    }
+    into(layout.buildDirectory.dir("cardboard/jni/arm64-v8a"))
+}
+
+tasks.named("preBuild") { dependsOn(buildCardboardSdk) }
+tasks.matching {
+    it.name.startsWith("configureCMake") ||
+        it.name.startsWith("buildCMake") ||
+        it.name.startsWith("externalNativeBuild")
+}.configureEach { dependsOn(extractCardboardNative) }
+
 android {
     namespace = "dev.koggles"
     compileSdk = 36
@@ -53,6 +88,10 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+
+    packaging {
+        jniLibs.pickFirsts += "**/libGfxPluginCardboard.so"
+    }
 }
 
 kotlin {
@@ -72,6 +111,13 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.datastore.preferences)
+
+    implementation(files(cardboardAar).builtBy(buildCardboardSdk))
+    implementation(libs.androidx.appcompat)
+    implementation(libs.play.services.vision)
+    implementation(libs.material)
+    implementation(libs.protobuf.javalite)
+    implementation(libs.jspecify)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

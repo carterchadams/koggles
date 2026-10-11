@@ -27,12 +27,21 @@ set(CMAKE_PROJECT_VERSION_PATCH 7)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/projectm ${CMAKE_BINARY_DIR}/projectm)
 
+# Cardboard SDK: libGfxPluginCardboard.so is extracted from the sub-built AAR by
+# the Gradle task extractCardboardNative.
+add_library(cardboard_api SHARED IMPORTED)
+set_target_properties(cardboard_api PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/../../../build/cardboard/jni/${ANDROID_ABI}/libGfxPluginCardboard.so
+    INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/cardboard/sdk/include
+)
+
 add_library(koggles SHARED
     core/audio_window.cpp
     jni/native_bridge.cpp
     renderer/engine.cpp
+    renderer/goggles.cpp
     renderer/renderer.cpp
 )
 target_include_directories(koggles PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/core)
-target_link_libraries(koggles libprojectM::projectM GLESv3 EGL log android)
+target_link_libraries(koggles libprojectM::projectM cardboard_api GLESv3 EGL log android)
 target_link_options(koggles PRIVATE -Wl,-z,max-page-size=16384)
