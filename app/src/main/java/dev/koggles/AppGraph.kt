@@ -1,7 +1,12 @@
 package dev.koggles
 
+import dev.koggles.audio.AudioSession
+import dev.koggles.audio.Source
+import dev.koggles.audio.UnavailableSource
+import dev.koggles.audio.VisualizerSource
 import dev.koggles.render.NativeRendererPort
 import dev.koggles.render.RenderCommands
+import kotlinx.coroutines.MainScope
 
 /** Process-wide singletons. Later tasks add services here as `val`s. */
 object AppGraph {
@@ -11,8 +16,24 @@ object AppGraph {
     lateinit var renderCommands: RenderCommands
         private set
 
+    lateinit var audio: AudioSession
+        private set
+
+    private val appScope = MainScope()
+
     fun init(app: KogglesApp) {
         this.app = app
         renderCommands = RenderCommands(NativeRendererPort(app.resources.displayMetrics.xdpi))
+        audio = AudioSession(
+            factory = { source, _, _ ->
+                when (source) {
+                    Source.Standard -> VisualizerSource()
+                    Source.HighQuality -> UnavailableSource() // Task 8
+                }
+            },
+            flush = { NativeBridge.flushAudio() },
+            scope = appScope,
+            explainerStore = {}, // in-memory until Task 15 persists it
+        )
     }
 }
