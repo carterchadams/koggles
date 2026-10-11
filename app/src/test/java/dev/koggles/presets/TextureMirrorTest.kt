@@ -186,4 +186,16 @@ class TextureMirrorTest {
         val plan = TextureMirror(tmp.root, copyFn).plan(p, manifest, dirExists = true)
         assertEquals(emptyList<String>(), plan.delete)
     }
+
+    @Test
+    fun evictedSingleFileWithSurvivingManifest_isRestored() {
+        val a = node("a.jpg")
+        val b = node("b.jpg")
+        val dir = mirror().apply(pack("user:p", a, b))
+        File(dir, "a.jpg").delete() // partial cache cleanup; manifest.json survives
+        copied.clear()
+        mirror().apply(pack("user:p", a, b))
+        assertEquals(listOf(a.id), copied)
+        assertTrue(File(dir, "a.jpg").isFile)
+    }
 }

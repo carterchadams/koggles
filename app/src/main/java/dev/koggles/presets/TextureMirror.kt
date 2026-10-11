@@ -69,6 +69,8 @@ class TextureMirror(
         val dirExists = dir.isDirectory
         val manifestFile = File(dir, MANIFEST)
         val files = HashMap(if (dirExists) readManifest(manifestFile).files else emptyMap())
+        // A manifest entry whose file was evicted individually is stale: drop it so it is re-copied.
+        files.keys.retainAll { isSafeName(it) && File(dir, it).isFile }
         if (!dirExists && !dir.mkdirs()) throw IOException("cannot create $dir")
         dir.listFiles()?.forEach { if (it.name.endsWith(TMP)) it.delete() }
 
