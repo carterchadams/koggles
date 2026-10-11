@@ -13,6 +13,9 @@ interface DocTree {
     val root: DocNode
     fun children(node: DocNode): List<DocNode>
     fun readText(node: DocNode): String
+
+    /** Identity of [node]'s source across trees/providers (ids are only unique per tree). */
+    fun sourceId(node: DocNode): String = node.id
 }
 
 /** Preset file extensions, lower case. Compare with [extensionOf]. */

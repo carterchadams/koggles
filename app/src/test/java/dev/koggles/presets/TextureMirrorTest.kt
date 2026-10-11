@@ -165,4 +165,25 @@ class TextureMirrorTest {
         val dir = mirror().apply(p)
         assertEquals(listOf("manifest.json", "ok.jpg"), dir.list()!!.sorted())
     }
+
+    @Test
+    fun differentSourceTreeWithSameIds_recopies() {
+        val x = node("x.png", size = 5, mtime = 7)
+        val otherProvider = object : DocTree by tree {
+            override fun sourceId(node: DocNode) = "content://other-provider/${node.id}"
+        }
+        val p = pack("user:p", x).copy(tree = otherProvider)
+        val manifest = MirrorManifest(mapOf("x.png" to entry(x))) // recorded from the default tree
+        val plan = TextureMirror(tmp.root, copyFn).plan(p, manifest, dirExists = true)
+        assertEquals(listOf("x.png"), plan.copy.map { it.second })
+    }
+
+    @Test
+    fun incompleteScan_doesNotDeleteCachedTextures() {
+        val kept = node("a.png")
+        val p = pack("user:p", kept).copy(readErrors = listOf("sub: provider timeout"))
+        val manifest = MirrorManifest(mapOf("a.png" to entry(kept), "gone.png" to MirrorEntry("src/gone.png", 1, 0)))
+        val plan = TextureMirror(tmp.root, copyFn).plan(p, manifest, dirExists = true)
+        assertEquals(emptyList<String>(), plan.delete)
+    }
 }

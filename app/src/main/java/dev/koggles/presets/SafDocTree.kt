@@ -19,6 +19,9 @@ class SafDocTree(private val resolver: ContentResolver, val treeUri: Uri) : DocT
     /** The document URI of [node], usable with [ContentResolver.openInputStream]. */
     fun uriOf(node: DocNode): Uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, node.id)
 
+    /** The full document URI: provider- and tree-qualified (spec §5.2 manifest source). */
+    override fun sourceId(node: DocNode): String = uriOf(node).toString()
+
     override fun children(node: DocNode): List<DocNode> {
         val uri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, node.id)
         val cursor = try {

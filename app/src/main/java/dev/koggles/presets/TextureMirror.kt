@@ -50,9 +50,12 @@ class TextureMirror(
         }
         val copy = winners.filter { (name, node) ->
             val e = manifest.files[name]
-            !dirExists || e == null || e.source != node.id || e.size != node.size || e.lastModified != node.lastModified
+            !dirExists || e == null || e.source != pack.tree.sourceId(node) ||
+                e.size != node.size || e.lastModified != node.lastModified
         }.map { (name, node) -> node to name }
-        val delete = manifest.files.keys.filter { it !in winners }.sorted()
+        // A scan with read errors is incomplete: absence is not proof of deletion, so keep the cache.
+        val delete = if (pack.readErrors.isNotEmpty()) emptyList()
+        else manifest.files.keys.filter { it !in winners }.sorted()
         return MirrorPlan(copy, delete, collisions)
     }
 
@@ -89,7 +92,7 @@ class TextureMirror(
                 log("texture copy failed: ${pack.id}/${node.name}: $e")
                 continue
             }
-            files[name] = MirrorEntry(node.id, node.size, node.lastModified)
+            files[name] = MirrorEntry(pack.tree.sourceId(node), node.size, node.lastModified)
             writeManifest(manifestFile, files)
         }
         return dir
