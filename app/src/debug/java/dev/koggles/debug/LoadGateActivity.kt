@@ -64,17 +64,25 @@ class LoadGateActivity : Activity() {
                 filesDir,
                 packageManager.getPackageInfo(packageName, 0).lastUpdateTime,
             ).installIfNeeded()
-            main.post {
-                if (!active) return@post
+            main.postDelayed({
+                if (!active) return@postDelayed
                 if (!bundledTextures.isDirectory) {
                     // projectM would substitute placeholder textures: a different workload, so no run.
                     Log.e(TAG, "invalid gate: bundled textures unavailable at $bundledTextures")
                     active = false
                     main.removeCallbacksAndMessages(null)
                     finish()
-                    return@post
+                    return@postDelayed
                 }
                 val texturePaths = listOf(bundledTextures.absolutePath)
+                if (AppGraph.audio.snapshot.value.state != dev.koggles.audio.AudioState.Active) {
+                    // Without device audio the workload is lighter than G4 requires.
+                    Log.e(TAG, "invalid gate: audio not active (${AppGraph.audio.snapshot.value.state}); grant RECORD_AUDIO and play music")
+                    active = false
+                    main.removeCallbacksAndMessages(null)
+                    finish()
+                    return@postDelayed
+                }
                 Log.i(TAG, "start mode=${if (goggles) "goggles" else "normal"} presets=${presets.size} textures=$bundledTextures")
                 var i = 0
                 fun step() {
@@ -86,7 +94,7 @@ class LoadGateActivity : Activity() {
                     main.postDelayed(::step, 15_000)
                 }
                 step()
-            }
+            }, AUDIO_GRACE_MS)
         }
     }
 
@@ -114,7 +122,7 @@ class LoadGateActivity : Activity() {
             if (h != 0L) {
                 val s = NativeBridge.rendererFrameStats(h)
                 val thermal = getSystemService(PowerManager::class.java).currentThermalStatus
-                Log.i(TAG, "p50=%.2f p95=%.2f n=%d thermal=%d".format(s[0], s[1], s[2].toInt(), thermal))
+                Log.i(TAG, "p50=%.2f p95=%.2f n=%d thermal=%d rms=%.4f".format(s[0], s[1], s[2].toInt(), thermal, NativeBridge.recentRms()))
             }
         }
         main.postDelayed(::logStats, 10_000)
@@ -161,5 +169,6 @@ class LoadGateActivity : Activity() {
 
     private companion object {
         const val TAG = "KogglesG4"
+        const val AUDIO_GRACE_MS = 5_000L
     }
 }
