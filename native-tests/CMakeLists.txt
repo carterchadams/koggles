@@ -26,6 +26,7 @@ add_executable(core_tests
   audio_window_test.cpp
   device_params_test.cpp
   eye_layout_test.cpp
+  frame_stats_test.cpp
   ${CORE_SOURCES})
 target_include_directories(core_tests PRIVATE ${CORE_DIR})
 target_link_libraries(core_tests PRIVATE GTest::gtest_main)

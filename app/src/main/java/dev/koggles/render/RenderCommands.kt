@@ -16,10 +16,12 @@ interface RendererPort {
 }
 
 class NativeRendererPort(private val xdpi: Float) : RendererPort {
-    override fun setTexturePaths(h: Long, paths: List<String>) {} // wired in Task 12
+    override fun setTexturePaths(h: Long, paths: List<String>) =
+        NativeBridge.rendererSetTextureSearchPaths(h, paths.toTypedArray())
     override fun setTransition(h: Long, t: TransitionState) {} // wired in Task 19
-    override fun setGoggles(h: Long, on: Boolean) {} // wired in Task 11
-    override fun setLens(h: Long, lens: LensState) {} // wired in Task 11
+    override fun setGoggles(h: Long, on: Boolean) = NativeBridge.rendererSetGoggles(h, on)
+    override fun setLens(h: Long, lens: LensState) =
+        NativeBridge.rendererSetLens(h, lens.offsetMm, lens.distortion, xdpi)
     override fun load(h: Long, data: String, requestId: Long, smooth: Boolean) =
         NativeBridge.rendererLoadPresetData(h, data, requestId, smooth)
     override fun loadIdle(h: Long, requestId: Long) = NativeBridge.rendererLoadIdle(h, requestId)

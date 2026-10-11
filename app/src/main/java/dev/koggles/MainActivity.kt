@@ -2,11 +2,13 @@ package dev.koggles
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,11 +31,14 @@ import dev.koggles.audio.AudioEvent
 import dev.koggles.audio.AudioState
 import dev.koggles.audio.ConsentData
 import dev.koggles.audio.Source
+import dev.koggles.render.ViewerQr
 import dev.koggles.render.VisualizerView
 import dev.koggles.ui.AudioErrorScreen
 import dev.koggles.ui.Explainer
 import dev.koggles.ui.UnsupportedScreen
 import dev.koggles.ui.isGles3Supported
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -50,6 +55,9 @@ class MainActivity : ComponentActivity() {
     /** Request id of the consent dialog in flight; survives activity recreation. */
     private var consentRequestId = 0L
 
+    /** Viewer-profile change count seen before launching the QR scanner (-1 = none pending). */
+    private var qrCountBeforeScan = -1
+
     private val consentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
         val consent = if (result.resultCode == RESULT_OK && data != null) ConsentData(result.resultCode, data) else null
@@ -59,11 +67,13 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putLong(KEY_CONSENT_REQUEST, consentRequestId)
+        outState.putInt(KEY_QR_COUNT, qrCountBeforeScan)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         consentRequestId = savedInstanceState?.getLong(KEY_CONSENT_REQUEST) ?: 0L
+        qrCountBeforeScan = savedInstanceState?.getInt(KEY_QR_COUNT, -1) ?: -1
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -95,6 +105,9 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 audio.uiEffects.collect(::handleUiEffect)
             }
+        }
+        lifecycleScope.launch {
+            AppGraph.renderCommands.state.map { it.goggles }.distinctUntilChanged().collect { applyOrientation(it) }
         }
     }
 
@@ -128,7 +141,30 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         visualizerView?.onResume()
+        if (qrCountBeforeScan >= 0) {
+            // Back from the QR scanner: a newly saved profile resets the spacing offset.
+            if (ViewerQr.changedCount() != qrCountBeforeScan) {
+                val commands = AppGraph.renderCommands
+                commands.setLens(commands.state.value.lens.copy(offsetMm = 0f))
+            }
+            qrCountBeforeScan = -1
+        }
+        applyOrientation(AppGraph.renderCommands.state.value.goggles)
     }
+
+    /** Opens the viewer-profile QR scanner (headset setup). */
+    fun scanViewerQr() {
+        qrCountBeforeScan = ViewerQr.changedCount()
+        ViewerQr.scan(this)
+    }
+
+    private fun applyOrientation(goggles: Boolean) {
+        requestedOrientation =
+            if (goggles) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        DebugHooks.onKeyEvent(this, event) || super.dispatchKeyEvent(event)
 
     override fun onPause() {
         visualizerView?.onPause()
@@ -137,5 +173,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val KEY_CONSENT_REQUEST = "consentRequestId"
+        const val KEY_QR_COUNT = "qrCountBeforeScan"
     }
 }

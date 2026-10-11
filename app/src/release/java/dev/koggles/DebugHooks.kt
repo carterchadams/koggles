@@ -4,4 +4,5 @@ package dev.koggles
 object DebugHooks {
     fun install(activity: MainActivity) {}
     fun onRendererReady(handle: Long) {}
+    fun onKeyEvent(activity: MainActivity, event: android.view.KeyEvent): Boolean = false
 }

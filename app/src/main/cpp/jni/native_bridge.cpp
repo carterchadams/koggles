@@ -3,9 +3,13 @@
 #include <GLES3/gl3.h>
 #include <android/log.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
+#include <vector>
 #include <string>
+
+#include <cardboard.h>
 
 #include "../renderer/engine.h"
 #include "../renderer/goggles.h"
@@ -129,6 +133,56 @@ Java_dev_koggles_NativeBridge_rendererLoadPresetData(JNIEnv* env, jobject, jlong
 JNIEXPORT void JNICALL
 Java_dev_koggles_NativeBridge_rendererLoadIdle(JNIEnv*, jobject, jlong h, jlong requestId) {
     if (h != 0) asRenderer(h)->loadIdle(requestId);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetGoggles(JNIEnv*, jobject, jlong h, jboolean on) {
+    if (h != 0) asRenderer(h)->setGoggles(on == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetLens(JNIEnv*, jobject, jlong h, jfloat offsetMm, jboolean distortion,
+                                              jfloat xdpi) {
+    if (h != 0) asRenderer(h)->setLens(offsetMm, distortion == JNI_TRUE, xdpi);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_dev_koggles_NativeBridge_rendererGogglesActive(JNIEnv*, jobject, jlong h) {
+    return h != 0 && asRenderer(h)->gogglesActive() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jdoubleArray JNICALL
+Java_dev_koggles_NativeBridge_rendererFrameStats(JNIEnv* env, jobject, jlong h) {
+    std::array<double, 3> s{0.0, 0.0, 0.0};
+    if (h != 0) s = asRenderer(h)->takeFrameStats();
+    jdoubleArray out = env->NewDoubleArray(3);
+    env->SetDoubleArrayRegion(out, 0, 3, s.data());
+    return out;
+}
+
+JNIEXPORT jint JNICALL
+Java_dev_koggles_NativeBridge_viewerParamsChangedCount(JNIEnv*, jobject) {
+    return CardboardQrCode_getDeviceParamsChangedCount();
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetTextureSearchPaths(JNIEnv* env, jobject, jlong h,
+                                                            jobjectArray paths) {
+    if (h == 0 || paths == nullptr) return;
+    const jsize n = env->GetArrayLength(paths);
+    std::vector<std::string> list;
+    list.reserve(static_cast<size_t>(n));
+    for (jsize i = 0; i < n; ++i) {
+        auto s = static_cast<jstring>(env->GetObjectArrayElement(paths, i));
+        if (s == nullptr) continue;
+        const char* chars = env->GetStringUTFChars(s, nullptr);
+        if (chars != nullptr) {
+            list.emplace_back(chars);
+            env->ReleaseStringUTFChars(s, chars);
+        }
+        env->DeleteLocalRef(s);
+    }
+    asRenderer(h)->setTextureSearchPaths(list);
 }
 
 JNIEXPORT jint JNICALL
