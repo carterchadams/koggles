@@ -118,11 +118,23 @@ class MenuTest {
     @Test fun menuOpen_forcesSingleViewPreview() {
         runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
         compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        // Goggles mode rotates to landscape: tap only once the rotation and re-layout are done.
+        compose.waitUntil(5_000) {
+            compose.activity.resources.configuration.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        }
+        compose.waitForIdle()
         openMenu()
         assertTrue(AppGraph.renderCommands.state.value.menuPreview)
         assertFalse(AppGraph.renderCommands.state.value.effectiveGoggles)
         compose.runOnUiThread { AppGraph.menu.close() }
         compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        // Leave portrait for the next test.
+        runBlocking { AppGraph.settings.update { it.copy(goggles = false) } }
+        compose.waitUntil(5_000) {
+            compose.activity.resources.configuration.orientation !=
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        }
     }
 
     @Test fun back_closesMenu() {
