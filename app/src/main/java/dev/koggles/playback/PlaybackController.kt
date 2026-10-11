@@ -88,8 +88,12 @@ class PlaybackController(
         scope.launch {
             applied.first { it?.bundledReady == true }
             val lastKey = values.lastPresetKey
-            if (lastKey != null && lastKey.startsWith("user:") && applied.value?.hasGrant == true) {
-                withTimeoutOrNull(USER_INDEX_WAIT_MS) { applied.first { it != null && !it.userIndexing } }
+            if (lastKey != null && lastKey.startsWith("user:")) {
+                // Bundled readiness is published before the grant probe: wait for the probe, then
+                // (if granted) the user index, all within the one 3 s budget.
+                withTimeoutOrNull(USER_INDEX_WAIT_MS) {
+                    applied.first { it != null && it.userProbed && (!it.hasGrant || !it.userIndexing) }
+                }
             }
             process(playlist.start(values.lastPresetKey))
         }
@@ -118,7 +122,15 @@ class PlaybackController(
     /** Id of the most recently issued request. */
     fun nowPlayingRequestId(): Long = playlist.latestRequestId
 
-    override fun onSwitchRequested(hardCut: Boolean) {
+    /**
+     * projectM's timer or beat asks to advance. [requestId] is the request the renderer was showing:
+     * events for a superseded request (a newer command is in flight or done) are dropped, as are
+     * events delivered after locking or during an interstitial (its own timer advances it).
+     */
+    override fun onSwitchRequested(hardCut: Boolean, requestId: Long) {
+        if (requestId != playlist.latestRequestId) return
+        if (values.locked || values.presetDurationSec == 0) return
+        if (lastIssued?.kind == Kind.Interstitial) return
         hardCutPending = hardCut
         next()
     }

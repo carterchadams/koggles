@@ -63,8 +63,9 @@ class PlaybackControllerTest {
     }
     private val libState = MutableStateFlow(state(ready = true))
 
-    private fun state(ready: Boolean, cat: Catalog = catalog, indexing: Boolean = false, grant: Boolean = false) =
-        LibraryState(cat, ready, indexing, grant, null, emptyMap(), emptyList())
+    private fun state(
+        ready: Boolean, cat: Catalog = catalog, indexing: Boolean = false, grant: Boolean = false, probed: Boolean = true,
+    ) = LibraryState(cat, ready, indexing, grant, null, emptyMap(), emptyList(), userProbed = probed)
 
     private fun TestScope.controller(
         texturePaths: suspend (String) -> List<String> = { listOf("/tex/$it") },
@@ -120,15 +121,57 @@ class PlaybackControllerTest {
         assertTrue(loadedKey(sink.loads().single()) in keys)
     }
 
+    @Test fun start_grantProbedAfterBundledReady_stillRestoresUserKey() = runTest {
+        // Production order: bundled readiness is published before the grant probe completes.
+        val bundledOnly = catalogOf(pack("bundled:p", "p0.milk"))
+        settings.update { it.copy(lastPresetKey = "user:u/u0.milk") }
+        libState.value = state(ready = true, cat = bundledOnly, grant = false, probed = false)
+        val c = controller()
+        c.start(); advanceTimeBy(500)
+        assertTrue(sink.calls.isEmpty())
+        libState.value = state(ready = true, cat = bundledOnly, indexing = true, grant = true)
+        advanceTimeBy(500)
+        assertTrue(sink.calls.isEmpty())
+        libState.value = state(ready = true, cat = catalogOf(pack("bundled:p", "p0.milk"), pack("user:u", "u0.milk")), grant = true)
+        advanceUntilIdle()
+        assertEquals("user:u/u0.milk", loadedKey(sink.loads().single()))
+    }
+
+    @Test fun switchRequested_staleRequestIgnored() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        c.onSwitchRequested(false, c.nowPlayingRequestId() - 1); advanceUntilIdle()
+        assertEquals(1, sink.loads().size)
+    }
+
+    @Test fun switchRequested_duringUserSelection_ignored() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val shown = c.nowPlayingRequestId()
+        c.onPresetLoaded(shown)
+        val target = keys.first { it != loadedKey(sink.loads().single()) }
+        gates[target] = CompletableDeferred()
+        c.select(target); advanceUntilIdle()
+        c.onSwitchRequested(false, shown); advanceUntilIdle()
+        gates[target]!!.complete(Unit); advanceUntilIdle()
+        assertEquals(2, sink.loads().size)
+        assertEquals(target, loadedKey(sink.loads().last()))
+    }
+
+    @Test fun switchRequested_whenLocked_ignored() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        c.setLocked(true); advanceUntilIdle()
+        c.onSwitchRequested(false, c.nowPlayingRequestId()); advanceUntilIdle()
+        assertEquals(1, sink.loads().size)
+    }
+
     @Test fun switchRequested_advances() = runTest {
         val c = controller(); c.start(); advanceUntilIdle()
-        c.onSwitchRequested(false); advanceUntilIdle()
+        c.onSwitchRequested(false, c.nowPlayingRequestId()); advanceUntilIdle()
         assertEquals(2, sink.loads().size)
     }
 
     @Test fun hardCutRequested_loadsWithSmoothFalse() = runTest {
         val c = controller(); c.start(); advanceUntilIdle()
-        c.onSwitchRequested(true); advanceUntilIdle()
+        c.onSwitchRequested(true, c.nowPlayingRequestId()); advanceUntilIdle()
         assertTrue(sink.loads().last().contains(",false,"))
         c.next(); advanceUntilIdle()
         assertTrue("hard cut applies to one load only", sink.loads().last().contains(",true,"))

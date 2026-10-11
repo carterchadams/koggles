@@ -58,6 +58,21 @@ class LibraryRepositoryTest {
         assertTrue(s.hasGrant)
     }
 
+    @Test fun userProbed_falseUntilGrantProbeReturns() {
+        val probe = CountDownLatch(1)
+        val r = repo(userTree = { probe.await(10, TimeUnit.SECONDS); null })
+        val ready = await(r, "ready") { it.bundledReady }
+        assertFalse("bundled readiness precedes the grant probe", ready.userProbed)
+        probe.countDown()
+        val probed = await(r, "probed") { it.userProbed }
+        assertFalse(probed.hasGrant)
+    }
+
+    @Test fun userProbed_trueOnceGranted() {
+        val s = await(repo(), "probed") { it.userProbed }
+        assertTrue(s.hasGrant)
+    }
+
     @Test fun noGrant_userPacksAbsent() {
         val s = await(repo(userTree = { null }), "ready") { it.bundledReady && !it.userIndexing }
         assertFalse(s.hasGrant)

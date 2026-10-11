@@ -20,7 +20,7 @@ class PresetCallbackTest {
     @Before fun listen() {
         previous = NativeBridge.listener
         NativeBridge.listener = object : NativeListener {
-            override fun onSwitchRequested(hardCut: Boolean) = Unit
+            override fun onSwitchRequested(hardCut: Boolean, requestId: Long) = Unit
             override fun onPresetFailed(requestId: Long, message: String) { events += "failed:$requestId" }
             override fun onPresetLoaded(requestId: Long) { events += "loaded:$requestId" }
         }

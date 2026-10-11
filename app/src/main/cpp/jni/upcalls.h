@@ -11,7 +11,7 @@ namespace koggles::upcalls {
 void init(JNIEnv* env);
 
 // GL thread. Each calls the matching @JvmStatic NativeBridge method, which re-posts to main.
-void switchRequested(bool hardCut);
+void switchRequested(bool hardCut, int64_t displayedRequestId);
 void presetFailed(int64_t requestId, const char* message);
 void presetLoaded(int64_t requestId);
 

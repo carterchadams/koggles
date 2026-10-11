@@ -41,7 +41,8 @@ private:
     void setProjectMSize(int w, int h);
 
     projectm_handle pm_ = nullptr;
-    int64_t pendingId_ = -1;  // load awaiting its outcome: failure callback, or loaded after a frame
+    int64_t pendingId_ = -1;    // load awaiting its outcome: failure callback, or loaded after a frame
+    int64_t displayedId_ = -1;  // last load reported loaded; tags switch requests for freshness checks
 
     static void onSwitchFailed(const char* filename, const char* message, void* self);
     static void onSwitchRequested(bool isHardCut, void* self);

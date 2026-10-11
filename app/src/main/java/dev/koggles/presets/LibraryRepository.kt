@@ -26,6 +26,8 @@ data class LibraryState(
     val bundledTextureDir: File?,
     val packTextureDirs: Map<String, File>,
     val errors: List<String>,
+    /** True once the folder grant has been probed at least once (hasGrant is meaningful). */
+    val userProbed: Boolean = false,
 )
 
 /**
@@ -139,6 +141,7 @@ class LibraryRepository(
                         catalog = Catalog(bundledPacks),
                         userIndexing = false,
                         hasGrant = false,
+                        userProbed = true,
                         packTextureDirs = emptyMap(),
                         errors = bundledErrors,
                     )
@@ -146,7 +149,7 @@ class LibraryRepository(
             }
             return
         }
-        _state.update { it.copy(hasGrant = true, userIndexing = true) }
+        _state.update { it.copy(hasGrant = true, userIndexing = true, userProbed = true) }
         val job = scope.launch(io) {
             val dirs = HashMap<String, File>()
             val errors = ArrayList<String>()
@@ -192,6 +195,7 @@ class LibraryRepository(
                                 catalog = Catalog(bundledPacks),
                                 userIndexing = false,
                                 hasGrant = stillGranted,
+                                userProbed = true,
                                 packTextureDirs = emptyMap(),
                                 errors = bundledErrors + errors + "user folder: ${e.message}",
                             )

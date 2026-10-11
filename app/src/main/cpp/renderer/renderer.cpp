@@ -24,8 +24,8 @@ void Renderer::onSwitchFailed(const char* /*filename*/, const char* message, voi
     }
 }
 
-void Renderer::onSwitchRequested(bool isHardCut, void* /*self*/) {
-    upcalls::switchRequested(isHardCut);
+void Renderer::onSwitchRequested(bool isHardCut, void* self) {
+    upcalls::switchRequested(isHardCut, static_cast<Renderer*>(self)->displayedId_);
 }
 
 Renderer::Renderer() : pcm_(2 * projectm_pcm_get_max_samples()) {
@@ -98,6 +98,7 @@ void Renderer::drawFrame() {
         // No failure was reported for the pending load and a frame has rendered: it loaded.
         const int64_t id = pendingId_;
         pendingId_ = -1;
+        displayedId_ = id;
         upcalls::presetLoaded(id);
     }
 }

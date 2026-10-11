@@ -36,16 +36,17 @@ void init(JNIEnv* e) {
     }
     gBridge = reinterpret_cast<jclass>(e->NewGlobalRef(local));
     e->DeleteLocalRef(local);
-    gSwitchRequested = e->GetStaticMethodID(gBridge, "onSwitchRequested", "(Z)V");
+    gSwitchRequested = e->GetStaticMethodID(gBridge, "onSwitchRequested", "(ZJ)V");
     gPresetFailed = e->GetStaticMethodID(gBridge, "onPresetFailed", "(JLjava/lang/String;)V");
     gPresetLoaded = e->GetStaticMethodID(gBridge, "onPresetLoaded", "(J)V");
     checkException(e);
 }
 
-void switchRequested(bool hardCut) {
+void switchRequested(bool hardCut, int64_t displayedRequestId) {
     JNIEnv* e = env();
     if (e == nullptr || gSwitchRequested == nullptr) return;
-    e->CallStaticVoidMethod(gBridge, gSwitchRequested, hardCut ? JNI_TRUE : JNI_FALSE);
+    e->CallStaticVoidMethod(gBridge, gSwitchRequested, hardCut ? JNI_TRUE : JNI_FALSE,
+                           static_cast<jlong>(displayedRequestId));
     checkException(e);
 }
 

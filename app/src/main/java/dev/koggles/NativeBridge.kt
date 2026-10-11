@@ -67,7 +67,9 @@ object NativeBridge {
     private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
 
     // Upcalls from the GL thread (upcalls.cpp); re-posted to the main thread.
-    @JvmStatic fun onSwitchRequested(hardCut: Boolean) { main.post { listener?.onSwitchRequested(hardCut) } }
+    @JvmStatic fun onSwitchRequested(hardCut: Boolean, requestId: Long) {
+        main.post { listener?.onSwitchRequested(hardCut, requestId) }
+    }
     @JvmStatic fun onPresetFailed(requestId: Long, message: String) { main.post { listener?.onPresetFailed(requestId, message) } }
     @JvmStatic fun onPresetLoaded(requestId: Long) { main.post { listener?.onPresetLoaded(requestId) } }
 }
