@@ -47,10 +47,10 @@ class PlaybackController(
     private val settings: Settings,
     private val library: PresetLibrary,
     private val libraryState: StateFlow<LibraryState>,
-) : NativeListener {
+) : NativeListener, PlaybackControls {
 
     private val _nowPlaying = MutableStateFlow(NowPlaying())
-    val nowPlaying: StateFlow<NowPlaying> = _nowPlaying.asStateFlow()
+    override val nowPlaying: StateFlow<NowPlaying> = _nowPlaying.asStateFlow()
 
     private var values = SettingsValues()
     private var lastIssued: PlayRequest? = null
@@ -104,12 +104,12 @@ class PlaybackController(
         }
     }
 
-    fun next() = process(playlist.next())
-    fun previous() { playlist.previous()?.let(::process) }
-    fun random() = process(playlist.random())
-    fun select(key: String) { playlist.select(key)?.let(::process) }
+    override fun next() = process(playlist.next())
+    override fun previous() { playlist.previous()?.let(::process) }
+    override fun random() = process(playlist.random())
+    override fun select(key: String) { playlist.select(key)?.let(::process) }
 
-    suspend fun skip() {
+    override suspend fun skip() {
         val key = playlist.current?.key ?: return
         val id = playlist.latestRequestId
         library.setSkipped(key, true)
@@ -118,12 +118,12 @@ class PlaybackController(
         process(playlist.skipCurrent())
     }
 
-    suspend fun toggleFavorite() {
+    override suspend fun toggleFavorite() {
         val key = playlist.current?.key ?: return
         library.toggleFavorite(key)
     }
 
-    suspend fun setLocked(on: Boolean) {
+    override suspend fun setLocked(on: Boolean) {
         settings.update { it.copy(locked = on) }
     }
 

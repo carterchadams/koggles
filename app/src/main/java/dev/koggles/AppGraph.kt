@@ -20,6 +20,15 @@ import dev.koggles.audio.UnavailableSource
 import dev.koggles.audio.VisualizerSource
 import dev.koggles.presets.PresetLibrary
 import dev.koggles.playback.PlaybackController
+import dev.koggles.playback.PlaybackControls
+import dev.koggles.audio.AudioState
+import dev.koggles.ui.MenuState
+import dev.koggles.ui.SilenceDetector
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import dev.koggles.playback.Playlist
 import dev.koggles.render.LensState
 import dev.koggles.render.TransitionState
@@ -66,6 +75,24 @@ object AppGraph {
 
     lateinit var playback: PlaybackController
         private set
+
+    lateinit var menu: MenuState
+        private set
+
+    @Volatile private var playbackOverride: PlaybackControls? = null
+
+    /** What the UI drives: [playback], unless a test has overridden it. */
+    val playbackControls: PlaybackControls get() = playbackOverride ?: playback
+
+    /** Instrumented tests only: replaces what the UI drives (null restores [playback]). */
+    fun overrideForTest(playback: PlaybackControls?) {
+        playbackOverride = playback
+    }
+
+    private val _silenceHint = MutableStateFlow(false)
+
+    /** Spec §7: true after 10 s of silence while audio is Active; false otherwise. */
+    val silenceHint: StateFlow<Boolean> = _silenceHint.asStateFlow()
 
     /** Every PCM producer pushes through this gate, tagged with its source generation. */
     val pcmGate = PcmGate(NativePcmSink)
@@ -150,5 +177,19 @@ object AppGraph {
                 renderCommands.setLens(LensState(v.lensOffsetMm, v.distortion))
             }
         }
+        menu = MenuState(setPreview = renderCommands::setMenuPreview, dispatch = audio::dispatch)
+        appScope.launch {
+            audio.snapshot.map { it.state == AudioState.Active }.distinctUntilChanged().collectLatest { active ->
+                _silenceHint.value = false
+                if (!active) return@collectLatest
+                val detector = SilenceDetector()
+                while (true) {
+                    delay(SILENCE_SAMPLE_MS)
+                    _silenceHint.value = detector.sample(NativeBridge.recentRms(), android.os.SystemClock.elapsedRealtime())
+                }
+            }
+        }
     }
+
+    private const val SILENCE_SAMPLE_MS = 250L
 }

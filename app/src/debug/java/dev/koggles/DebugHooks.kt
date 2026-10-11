@@ -1,15 +1,11 @@
 package dev.koggles
 
-/** Debug-only behaviour, kept out of main code (D13). */
+/** Debug-only behaviour, kept out of main code (D13). None remains; the hooks stay for later use. */
 object DebugHooks {
-    fun install(activity: MainActivity) {
-        activity.visualizerView?.let { dev.koggles.debug.DebugSourceToggle.install(it) }
-    }
+    fun install(@Suppress("UNUSED_PARAMETER") activity: MainActivity) {}
 
-    /** Debug lens keys (Task 11): see [dev.koggles.debug.DebugLensKeys]. */
-    fun onKeyEvent(activity: MainActivity, event: android.view.KeyEvent): Boolean =
-        dev.koggles.debug.DebugLensKeys.onKeyEvent(activity, event)
+    fun onKeyEvent(@Suppress("UNUSED_PARAMETER") activity: MainActivity, @Suppress("UNUSED_PARAMETER") event: android.view.KeyEvent): Boolean = false
 
-    /** GL thread. No debug behaviour since Task 19 (playback owns preset loading). */
+    /** GL thread. */
     fun onRendererReady(@Suppress("UNUSED_PARAMETER") handle: Long) {}
 }

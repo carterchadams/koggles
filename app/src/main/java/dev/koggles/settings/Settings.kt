@@ -31,6 +31,8 @@ data class SettingsValues(
     val explainerSeen: Boolean = false,
     val scope: Scope = Scope.AllEnabled,
     val lastPresetKey: String? = null,
+    /** The first-run "Choose folder" prompt has been shown (spec §4 Library). */
+    val folderPrompted: Boolean = false,
 )
 
 val PRESET_DURATIONS = listOf(0, 15, 30, 60, 120)
@@ -65,6 +67,7 @@ class Settings(private val store: DataStore<Preferences>) {
             prefs[K.source] = next.source.name
             prefs[K.explainerSeen] = next.explainerSeen
             prefs[K.scope] = next.scope.encode()
+            prefs[K.folderPrompted] = next.folderPrompted
             val last = next.lastPresetKey
             if (last == null) prefs.remove(K.lastPresetKey) else prefs[K.lastPresetKey] = last
         }
@@ -88,6 +91,7 @@ class Settings(private val store: DataStore<Preferences>) {
             explainerSeen = p[K.explainerSeen] ?: d.explainerSeen,
             scope = decodeScope(p[K.scope]),
             lastPresetKey = p[K.lastPresetKey],
+            folderPrompted = p[K.folderPrompted] ?: d.folderPrompted,
         ).clamped()
     }
 
@@ -107,5 +111,6 @@ class Settings(private val store: DataStore<Preferences>) {
         val explainerSeen = booleanPreferencesKey("settings.explainerSeen")
         val scope = stringPreferencesKey("settings.scope")
         val lastPresetKey = stringPreferencesKey("settings.lastPresetKey")
+        val folderPrompted = booleanPreferencesKey("settings.folderPrompted")
     }
 }

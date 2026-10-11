@@ -47,6 +47,13 @@ class SettingsTest {
         assertEquals(SettingsValues(), v)
     }
 
+    @Test fun folderPromptedDefaultsFalse() = runBlocking {
+        val settings = Settings(store())
+        assertEquals(false, settings.values.first().folderPrompted)
+        settings.update { it.copy(folderPrompted = true) }
+        assertEquals(true, settings.values.first().folderPrompted)
+    }
+
     @Test fun scopeRoundTripsAllFour() {
         val all = listOf(
             Scope.AllEnabled,
