@@ -219,4 +219,18 @@ class TextureMirrorTest {
         mirror().apply(pack("user:p", a).copy(readErrors = listOf("sub: timeout")))
         assertTrue(File(dir, "b.jpg").isFile)
     }
+
+    @Test
+    fun manifestLost_failedRecopyOfCurrentSource_keepsCachedFile_thenRetries() {
+        val a = node("a.jpg")
+        val dir = mirror().apply(pack("user:p", a))
+        File(dir, "manifest.json").delete()
+        failOn = { it.id == a.id }
+        mirror().apply(pack("user:p", a)) // complete scan, but a's copy fails
+        assertTrue("cached a.jpg survives a failed refresh", File(dir, "a.jpg").isFile)
+        failOn = { false }
+        copied.clear()
+        mirror().apply(pack("user:p", a))
+        assertEquals(listOf(a.id), copied)
+    }
 }

@@ -26,6 +26,8 @@ data class MirrorPlan(
     val copy: List<Pair<DocNode, String>>,
     val delete: List<String>,
     val collisions: List<String>,
+    /** Flattened names of every texture this scan mirrors (copied or unchanged). */
+    val winners: Set<String> = emptySet(),
 )
 
 /**
@@ -56,7 +58,7 @@ class TextureMirror(
         // A scan with read errors is incomplete: absence is not proof of deletion, so keep the cache.
         val delete = if (pack.readErrors.isNotEmpty()) emptyList()
         else manifest.files.keys.filter { it !in winners }.sorted()
-        return MirrorPlan(copy, delete, collisions)
+        return MirrorPlan(copy, delete, collisions, winners.keys)
     }
 
     /**
@@ -101,7 +103,9 @@ class TextureMirror(
         // manifest itself was lost) — remove them so they cannot shadow bundled textures.
         if (pack.readErrors.isEmpty()) {
             dir.listFiles()?.forEach { f ->
-                if (f.isFile && f.name != MANIFEST && f.name !in files) f.delete()
+                // Orphans are files this complete scan does not mirror at all; a current source
+                // whose refresh failed keeps its previous good copy.
+                if (f.isFile && f.name != MANIFEST && f.name !in plan.winners) f.delete()
             }
         }
         return dir
