@@ -6,6 +6,35 @@ object NativeBridge {
         System.loadLibrary("koggles")
     }
 
+    external fun nativeInit()
+    /**
+     * Once per process, with a display context derived from the Application (never an Activity):
+     * the SDK keeps a JNI global reference to the
+     * context it is given, so passing an Activity would pin it. The QR scanner is launched from
+     * Kotlin with an Activity instead of through the SDK.
+     */
+    external fun cardboardInit(appContext: android.content.Context)
+
+    /** Diagnostic: creates and destroys a Cardboard lens distortion for the default viewer. */
+    external fun cardboardLensProbe(width: Int, height: Int): Boolean
+
+    /**
+     * Any thread. [buf] must be a direct buffer of stereo interleaved floats; [frames] frames are
+     * read from its start (position ignored). Counts beyond its capacity are rejected.
+     */
+    external fun pushPcmFloat(buf: java.nio.FloatBuffer, frames: Int)
+
+    /** Any thread. 8-bit unsigned mono samples (Visualizer waveform). */
+    external fun pushPcmU8(buf: ByteArray, frames: Int)
+    external fun flushAudio()
+    external fun recentRms(): Float
+
+    /** GL thread: clears pending GL error flags; returns how many were cleared. */
+    external fun glDrainErrors(): Int
+
+    /** Debug aid: number of native renderers destroyed in this process. */
+    external fun rendererDestroyCount(): Int
+
     external fun rendererCreate(): Long
     external fun rendererDestroy(h: Long)
     external fun rendererSurfaceChanged(h: Long, width: Int, height: Int)
