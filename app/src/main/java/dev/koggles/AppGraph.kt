@@ -3,6 +3,13 @@ package dev.koggles
 import androidx.datastore.preferences.preferencesDataStoreFile
 import dev.koggles.settings.KogglesStore
 import dev.koggles.audio.AudioSession
+import dev.koggles.presets.AndroidAssetSource
+import dev.koggles.presets.AssetDocTree
+import dev.koggles.presets.FolderGrant
+import dev.koggles.presets.LibraryRepository
+import dev.koggles.presets.PresetIndexer
+import dev.koggles.presets.TextureInstaller
+import dev.koggles.presets.TextureMirror
 import dev.koggles.audio.AudioSnapshot
 import dev.koggles.audio.NativePcmSink
 import dev.koggles.audio.PcmGate
@@ -44,6 +51,12 @@ object AppGraph {
     lateinit var library: PresetLibrary
         private set
 
+    lateinit var folderGrant: FolderGrant
+        private set
+
+    lateinit var libraryRepo: LibraryRepository
+        private set
+
     /** Every PCM producer pushes through this gate, tagged with its source generation. */
     val pcmGate = PcmGate(NativePcmSink)
 
@@ -56,6 +69,23 @@ object AppGraph {
         }
         settings = Settings(store)
         library = PresetLibrary(store)
+        folderGrant = FolderGrant(app)
+        libraryRepo = LibraryRepository(
+            scope = appScope,
+            bundledTree = { AssetDocTree(AndroidAssetSource(app.assets), "presets") },
+            installTextures = {
+                val versionKey = app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime
+                TextureInstaller(AndroidAssetSource(app.assets), app.filesDir, versionKey).installIfNeeded()
+            },
+            userTree = { folderGrant.currentTree() },
+            mirror = TextureMirror(app.cacheDir, copy = { node, dest ->
+                val tree = folderGrant.currentTree() ?: throw java.io.IOException("folder grant lost")
+                val input = app.contentResolver.openInputStream(tree.uriOf(node))
+                    ?: throw java.io.IOException("cannot open ${node.id}")
+                input.use { src -> dest.outputStream().use { src.copyTo(it) } }
+            }, log = { android.util.Log.w("KogglesLib", it) }),
+            indexer = PresetIndexer(kotlinx.coroutines.Dispatchers.IO),
+        )
         // One small blocking read at process start so the audio machine begins with the persisted
         // source and explainer flag; DataStore reads on its own IO scope, so this cannot deadlock main.
         val persisted = runBlocking { settings.values.first() }
