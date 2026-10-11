@@ -8,6 +8,9 @@ object NativeBridge {
 
     external fun nativeInit()
 
+    /** Main thread, from `MainActivity.onCreate`: `Cardboard_initializeAndroid(vm, activity)` (D5). */
+    external fun cardboardInit(activity: android.app.Activity)
+
     /**
      * Any thread. [buf] must be a direct buffer of stereo interleaved floats; [frames] frames are
      * read from its start (position ignored). Counts beyond its capacity are rejected.
