@@ -32,7 +32,8 @@ class FolderGrant(context: Context) {
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         .putExtra(
             DocumentsContract.EXTRA_INITIAL_URI,
-            DocumentsContract.buildRootUri("com.android.externalstorage.documents", "primary"),
+            // Spec §5.1: open the picker at Documents (a hint only).
+            DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents"),
         )
 
     /** Persists read access to [uri] and releases every other persisted grant. */
