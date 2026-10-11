@@ -97,6 +97,13 @@ class TextureMirror(
             files[name] = MirrorEntry(pack.tree.sourceId(node), node.size, node.lastModified)
             writeManifest(manifestFile, files)
         }
+        // On a complete scan, files that are no longer mirrored sources are orphans (e.g. after the
+        // manifest itself was lost) — remove them so they cannot shadow bundled textures.
+        if (pack.readErrors.isEmpty()) {
+            dir.listFiles()?.forEach { f ->
+                if (f.isFile && f.name != MANIFEST && f.name !in files) f.delete()
+            }
+        }
         return dir
     }
 

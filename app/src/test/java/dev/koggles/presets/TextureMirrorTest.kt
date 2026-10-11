@@ -198,4 +198,25 @@ class TextureMirrorTest {
         assertEquals(listOf(a.id), copied)
         assertTrue(File(dir, "a.jpg").isFile)
     }
+
+    @Test
+    fun manifestLostThenSourceRemoved_orphanDeletedOnCompleteScan() {
+        val a = node("a.jpg")
+        val b = node("b.jpg")
+        val dir = mirror().apply(pack("user:p", a, b))
+        File(dir, "manifest.json").delete()
+        mirror().apply(pack("user:p", a)) // b removed at the source; complete scan
+        assertTrue(File(dir, "a.jpg").isFile)
+        assertTrue("orphan b.jpg removed", !File(dir, "b.jpg").exists())
+    }
+
+    @Test
+    fun manifestLost_incompleteScan_keepsFiles() {
+        val a = node("a.jpg")
+        val b = node("b.jpg")
+        val dir = mirror().apply(pack("user:p", a, b))
+        File(dir, "manifest.json").delete()
+        mirror().apply(pack("user:p", a).copy(readErrors = listOf("sub: timeout")))
+        assertTrue(File(dir, "b.jpg").isFile)
+    }
 }
