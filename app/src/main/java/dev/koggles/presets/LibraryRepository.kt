@@ -45,7 +45,11 @@ class LibraryRepository(
     private val mirror: TextureMirror,
     private val indexer: PresetIndexer,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Diagnostics (tag `KogglesLib` in the app); logs `catalog-ready` once per process. */
+    private val log: (String) -> Unit = {},
 ) {
+    private val createdAtNs = System.nanoTime()
+
     private val _state = MutableStateFlow(
         LibraryState(Catalog(emptyList()), false, false, false, null, emptyMap(), emptyList()),
     )
@@ -152,6 +156,9 @@ class LibraryRepository(
         }
         bundledPacks = bundled
         bundledErrors = indexErrors + listOfNotNull(installError)
+        // Blueprint Task 19 Step 5 measures this: time from process start of the library to a
+        // ready bundled catalog.
+        log("catalog-ready ms=${(System.nanoTime() - createdAtNs) / 1_000_000} presets=${bundled.sumOf { it.presets.size }}")
         _state.update {
             it.copy(
                 catalog = Catalog(bundled),

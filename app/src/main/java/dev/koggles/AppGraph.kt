@@ -130,6 +130,7 @@ object AppGraph {
                 },
             ),
             indexer = PresetIndexer(kotlinx.coroutines.Dispatchers.IO),
+            log = { android.util.Log.i("KogglesLib", it) },
         )
         // One small blocking read at process start so the audio machine begins with the persisted
         // source and explainer flag; DataStore reads on its own IO scope, so this cannot deadlock main.

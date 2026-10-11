@@ -36,7 +36,8 @@ class LibraryRepositoryTest {
         userTree: suspend () -> DocTree? = { user },
         install: () -> File = { bundledTex },
         bundledTree: () -> DocTree = { bundled },
-    ) = LibraryRepository(scope, bundledTree, install, userTree, mirror, PresetIndexer(Dispatchers.IO), Dispatchers.IO)
+        log: (String) -> Unit = {},
+    ) = LibraryRepository(scope, bundledTree, install, userTree, mirror, PresetIndexer(Dispatchers.IO), Dispatchers.IO, log)
 
     private fun await(r: LibraryRepository, what: String, cond: (LibraryState) -> Boolean): LibraryState = runBlocking {
         withTimeout(10_000) { r.state.first(cond) }
@@ -202,6 +203,18 @@ class LibraryRepositoryTest {
         val s = r.state.value
         assertTrue("new grant kept: ${s.packIds()}", "user:Other" in s.packIds())
         assertTrue(s.hasGrant)
+    }
+
+    @Test fun catalogReady_loggedOnceWithTiming() {
+        val lines = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val r = repo(log = { lines += it })
+        await(r, "user merged") { "user:Mine" in it.packIds() && !it.userIndexing }
+        r.refresh()
+        await(r, "refreshed") { !it.userIndexing }
+        Thread.sleep(200)
+        val ready = lines.filter { it.startsWith("catalog-ready") }
+        assertEquals(lines.toString(), 1, ready.size)
+        assertTrue(ready.single(), Regex("catalog-ready ms=\\d+ presets=2").matches(ready.single()))
     }
 
     @Test fun reportError_appearsInErrors() {
