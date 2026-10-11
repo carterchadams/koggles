@@ -54,32 +54,30 @@ class LifecycleStressTest {
     @Test
     fun churn_noGlErrorsAndPresetKept() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            awaitPresetLoaded()
+            val id = awaitPresetLoaded()
             repeat(20) {
                 scenario.moveToState(Lifecycle.State.CREATED)
                 scenario.moveToState(Lifecycle.State.RESUMED)
-                assertFrameOk(scenario)
+                assertFrameOk(scenario, id)
             }
             repeat(20) {
                 scenario.recreate()
-                assertFrameOk(scenario)
+                assertFrameOk(scenario, id)
             }
             repeat(40) { i -> commands.setGoggles(i % 2 == 0) }
-            assertFrameOk(scenario)
+            assertFrameOk(scenario, id)
         }
     }
 
     @Test
     fun pauseResumeWithoutRecreation_rendererStaysAttached() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            awaitPresetLoaded()
-            val requestId = commands.state.value.preset?.requestId
+            val requestId = awaitPresetLoaded()
             repeat(20) {
                 scenario.moveToState(Lifecycle.State.STARTED)
                 scenario.moveToState(Lifecycle.State.RESUMED)
                 assertNotEquals(0L, awaitAttached())
-                assertFrameOk(scenario)
-                assertEquals(requestId, commands.state.value.preset?.requestId)
+                assertFrameOk(scenario, requestId)
             }
         }
     }
@@ -87,7 +85,7 @@ class LifecycleStressTest {
     @Test
     fun contextLossPath_recreatesAndReplays() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            awaitPresetLoaded()
+            val id = awaitPresetLoaded()
             awaitAttached()
             val destroysBefore = NativeBridge.rendererDestroyCount()
             scenario.recreate()
@@ -98,19 +96,34 @@ class LifecycleStressTest {
                 assertTrue("old renderer destroyed and new one attached", System.nanoTime() < deadline)
                 Thread.sleep(20)
             }
-            assertFrameOk(scenario)
+            assertFrameOk(scenario, id)
             Thread.sleep(500) // no further destroys may follow
             assertEquals(1, NativeBridge.rendererDestroyCount() - destroysBefore)
-            assertEquals(1L, commands.state.value.preset?.requestId)
         }
     }
 
-    private fun awaitPresetLoaded() {
+    @Test
+    fun loadDuringPause_appliedOnResume() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val id = awaitPresetLoaded()
+            val data = AppGraph.app.assets.open("g1/ok.milk").bufferedReader().use { it.readText() }
+            scenario.moveToState(Lifecycle.State.STARTED) // paused: GL thread has no current context
+            commands.loadPreset(data, id + 1, false, emptyList())
+            commands.setGoggles(true)
+            commands.setGoggles(false)
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            assertFrameOk(scenario, id + 1)
+        }
+    }
+
+    /** RenderCommands is process-scoped, so earlier tests may have advanced the request id. */
+    private fun awaitPresetLoaded(): Long {
         val deadline = System.nanoTime() + 10_000_000_000L
-        while (commands.state.value.preset?.requestId != 1L) {
-            assertTrue("debug preset loaded", System.nanoTime() < deadline)
+        while (commands.state.value.preset == null) {
+            assertTrue("a preset loaded", System.nanoTime() < deadline)
             Thread.sleep(20)
         }
+        return commands.state.value.preset!!.requestId
     }
 
     private fun awaitAttached(): Long {
@@ -123,7 +136,7 @@ class LifecycleStressTest {
     }
 
     /** Waits for the current view's GL thread to run, then checks the last frame's GL error. */
-    private fun assertFrameOk(scenario: ActivityScenario<MainActivity>) {
+    private fun assertFrameOk(scenario: ActivityScenario<MainActivity>, expectedRequestId: Long) {
         awaitAttached()
         val glError = AtomicInteger(-1)
         val done = CountDownLatch(1)
@@ -137,6 +150,6 @@ class LifecycleStressTest {
         }
         assertTrue("GL thread ran", done.await(10, SECONDS))
         assertEquals(0, glError.get())
-        assertEquals(1L, commands.state.value.preset?.requestId)
+        assertEquals(expectedRequestId, commands.state.value.preset?.requestId)
     }
 }

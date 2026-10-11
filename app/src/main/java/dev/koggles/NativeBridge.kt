@@ -8,7 +8,10 @@ object NativeBridge {
 
     external fun nativeInit()
 
-    /** Any thread. [buf] must be a direct buffer of stereo interleaved floats. */
+    /**
+     * Any thread. [buf] must be a direct buffer of stereo interleaved floats; [frames] frames are
+     * read from its start (position ignored). Counts beyond its capacity are rejected.
+     */
     external fun pushPcmFloat(buf: java.nio.FloatBuffer, frames: Int)
 
     /** Any thread. 8-bit unsigned mono samples (Visualizer waveform). */

@@ -28,10 +28,7 @@ class MainActivity : ComponentActivity() {
             setContent { UnsupportedScreen() }
             return
         }
-        visualizerView = VisualizerView(this).also {
-            AppGraph.glExecutor.target = it
-            setContentView(it)
-        }
+        visualizerView = VisualizerView(this).also { setContentView(it) }
     }
 
     override fun onResume() {
@@ -42,10 +39,5 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         visualizerView?.onPause()
         super.onPause()
-    }
-
-    override fun onDestroy() {
-        if (AppGraph.glExecutor.target === visualizerView) AppGraph.glExecutor.target = null
-        super.onDestroy()
     }
 }

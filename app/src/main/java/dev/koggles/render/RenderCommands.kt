@@ -4,12 +4,6 @@ import dev.koggles.NativeBridge
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-
-/** Runs blocks on the GL thread. */
-fun interface GlExecutor {
-    fun run(block: () -> Unit)
-}
 
 /** Seam over the `NativeBridge.renderer*` calls. Every call happens on the GL thread. */
 interface RendererPort {
@@ -32,86 +26,114 @@ class NativeRendererPort(private val xdpi: Float) : RendererPort {
 }
 
 /**
- * Process-scoped renderer front end. Commands always update [state]; they reach the native
- * renderer only while one is attached. A newly attached renderer gets the whole state replayed.
+ * Process-scoped renderer front end. Commands update [state] atomically and queue a native
+ * operation. The queue is drained by the GL thread that owns the attached renderer, at the start
+ * of each frame — the only point where its EGL context and surface are guaranteed current.
+ * A newly attached renderer gets the whole state replayed and the stale queue discarded.
  */
-class RenderCommands(private val exec: GlExecutor, private val native: RendererPort) {
+class RenderCommands(private val native: RendererPort) {
 
+    private val lock = Any()
     private val _state = MutableStateFlow(RenderState())
     val state: StateFlow<RenderState> = _state.asStateFlow()
 
-    /** Native renderer handle, 0 when none. Read and written on the GL thread. */
+    private val pending = ArrayDeque<(Long) -> Unit>() // guarded by lock
+
+    /** Attached native renderer, 0 when none. */
     @Volatile
     var attachedHandle: Long = 0L
         private set
 
-    fun loadPreset(data: String, requestId: Long, smooth: Boolean, texturePaths: List<String>) {
-        if (isSuperseded(requestId)) return
-        _state.update { it.copy(preset = PresetLoad(requestId, data), texturePaths = texturePaths) }
-        onGl { h ->
-            native.setTexturePaths(h, texturePaths)
-            native.load(h, data, requestId, smooth)
+    @Volatile
+    private var owner: Thread? = null
+
+    fun loadPreset(data: String, requestId: Long, smooth: Boolean, texturePaths: List<String>) = mutate {
+        if (isSuperseded(it, requestId)) return@mutate null
+        it.copy(preset = PresetLoad(requestId, data), texturePaths = texturePaths) to { h: Long ->
+            // A newer request accepted since this one was queued supersedes it.
+            if (_state.value.preset?.requestId == requestId) {
+                native.setTexturePaths(h, texturePaths)
+                native.load(h, data, requestId, smooth)
+            }
         }
     }
 
-    fun loadIdle(requestId: Long) {
-        if (isSuperseded(requestId)) return
-        _state.update { it.copy(preset = PresetLoad(requestId, null)) }
-        onGl { h -> native.loadIdle(h, requestId) }
+    fun loadIdle(requestId: Long) = mutate {
+        if (isSuperseded(it, requestId)) return@mutate null
+        it.copy(preset = PresetLoad(requestId, null)) to { h: Long ->
+            if (_state.value.preset?.requestId == requestId) native.loadIdle(h, requestId)
+        }
     }
 
-    fun setGoggles(on: Boolean) {
-        _state.update { it.copy(goggles = on) }
-        val effective = _state.value.effectiveGoggles
-        onGl { h -> native.setGoggles(h, effective) }
+    fun setGoggles(on: Boolean) = mutate {
+        val next = it.copy(goggles = on)
+        next to { h: Long -> native.setGoggles(h, next.effectiveGoggles) }
     }
 
-    fun setMenuPreview(on: Boolean) {
-        _state.update { it.copy(menuPreview = on) }
-        val effective = _state.value.effectiveGoggles
-        onGl { h -> native.setGoggles(h, effective) }
+    fun setMenuPreview(on: Boolean) = mutate {
+        val next = it.copy(menuPreview = on)
+        next to { h: Long -> native.setGoggles(h, next.effectiveGoggles) }
     }
 
-    fun setLens(lens: LensState) {
-        _state.update { it.copy(lens = lens) }
-        onGl { h -> native.setLens(h, lens) }
+    fun setLens(lens: LensState) = mutate {
+        it.copy(lens = lens) to { h: Long -> native.setLens(h, lens) }
     }
 
-    fun setTransition(t: TransitionState) {
-        _state.update { it.copy(transition = t) }
-        onGl { h -> native.setTransition(h, t) }
+    fun setTransition(t: TransitionState) = mutate {
+        it.copy(transition = t) to { h: Long -> native.setTransition(h, t) }
     }
 
     /**
-     * GL thread, from `onSurfaceCreated`, with a freshly created renderer. Returns the
-     * previously attached handle (0 if none) and replays the full state into [handle].
+     * GL thread, from `onSurfaceCreated`, with a freshly created renderer. The calling thread
+     * becomes the owner. Returns the previously attached handle (0 if none), discards queued
+     * operations, and replays the full state into [handle].
      */
     fun attach(handle: Long): Long {
-        val previous = attachedHandle
-        attachedHandle = handle
-        val s = _state.value
-        native.setTexturePaths(handle, s.texturePaths)
-        native.setTransition(handle, s.transition)
-        native.setGoggles(handle, s.effectiveGoggles)
-        native.setLens(handle, s.lens)
-        when (val p = s.preset) {
-            null -> Unit
-            else -> if (p.data == null) native.loadIdle(handle, p.requestId)
+        val snapshot: RenderState
+        val previous: Long
+        synchronized(lock) {
+            previous = attachedHandle
+            attachedHandle = handle
+            owner = Thread.currentThread()
+            pending.clear()
+            snapshot = _state.value
+        }
+        native.setTexturePaths(handle, snapshot.texturePaths)
+        native.setTransition(handle, snapshot.transition)
+        native.setGoggles(handle, snapshot.effectiveGoggles)
+        native.setLens(handle, snapshot.lens)
+        snapshot.preset?.let { p ->
+            if (p.data == null) native.loadIdle(handle, p.requestId)
             else native.load(handle, p.data, p.requestId, false)
         }
         return previous
     }
 
-    private fun isSuperseded(requestId: Long): Boolean {
-        val current = _state.value.preset?.requestId ?: return false
-        return requestId < current
+    /** The attached handle if the calling thread owns it, else 0. */
+    fun handleForCurrentThread(): Long =
+        if (owner === Thread.currentThread()) attachedHandle else 0L
+
+    /** Owner GL thread, at the start of a frame: applies queued operations in order. */
+    fun drain() {
+        val h = handleForCurrentThread()
+        if (h == 0L) return
+        while (true) {
+            val op = synchronized(lock) { pending.removeFirstOrNull() } ?: return
+            op(h)
+        }
     }
 
-    private fun onGl(block: (Long) -> Unit) {
-        if (attachedHandle == 0L) return
-        exec.run {
-            val h = attachedHandle
-            if (h != 0L) block(h)
+    /** Applies [change] atomically; a non-null result updates state and queues its operation. */
+    private inline fun mutate(change: (RenderState) -> Pair<RenderState, (Long) -> Unit>?) {
+        synchronized(lock) {
+            val (next, op) = change(_state.value) ?: return
+            _state.value = next
+            if (attachedHandle != 0L) pending.addLast(op)
         }
+    }
+
+    private fun isSuperseded(s: RenderState, requestId: Long): Boolean {
+        val current = s.preset?.requestId ?: return false
+        return requestId < current
     }
 }

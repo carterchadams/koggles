@@ -11,11 +11,13 @@ import javax.microedition.khronos.opengles.GL10
 /**
  * Hosts the GL thread. The native renderer lives as long as its EGL context: pauses that
  * preserve the context keep it, and a new context replaces it via [RenderCommands.attach].
+ * Renderer commands are applied in [onDrawFrame] via [RenderCommands.drain], never from
+ * `queueEvent`, because queued events can run while no EGL context is current.
  */
 class VisualizerView(
     context: Context,
     private val commands: RenderCommands = AppGraph.renderCommands,
-) : GLSurfaceView(context), GlExecutor {
+) : GLSurfaceView(context) {
 
     /** Called on the GL thread after a renderer is created and sized, once per EGL context. */
     var onRendererReady: ((Long) -> Unit)? = null
@@ -37,7 +39,7 @@ class VisualizerView(
             }
 
             override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-                val h = commands.attachedHandle
+                val h = commands.handleForCurrentThread()
                 if (h == 0L) return
                 NativeBridge.rendererSurfaceChanged(h, width, height)
                 if (!sized) {
@@ -48,11 +50,14 @@ class VisualizerView(
             }
 
             override fun onDrawFrame(gl: GL10?) {
-                val h = commands.attachedHandle
-                if (h != 0L) NativeBridge.rendererDrawFrame(h)
+                // Only the GL thread that attached the renderer may touch it, and only here,
+                // where its context and surface are current.
+                val h = commands.handleForCurrentThread()
+                if (h == 0L) return
+                commands.drain()
+                NativeBridge.rendererDrawFrame(h)
             }
         })
     }
 
-    override fun run(block: () -> Unit) = queueEvent(block)
 }

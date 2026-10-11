@@ -1,5 +1,7 @@
 package dev.koggles.render
 
+import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -7,7 +9,7 @@ import org.junit.Test
 class RenderCommandsTest {
 
     private class RecordingPort : RendererPort {
-        val calls = mutableListOf<String>()
+        val calls = java.util.Collections.synchronizedList(mutableListOf<String>())
         override fun setTexturePaths(h: Long, paths: List<String>) { calls += "texturePaths($h,${paths.joinToString()})" }
         override fun setTransition(h: Long, t: TransitionState) { calls += "transition($h,${t.blendSec})" }
         override fun setGoggles(h: Long, on: Boolean) { calls += "goggles($h,$on)" }
@@ -16,18 +18,15 @@ class RenderCommandsTest {
         override fun loadIdle(h: Long, requestId: Long) { calls += "idle($h,$requestId)" }
     }
 
-    private val immediate = object : GlExecutor {
-        override fun run(block: () -> Unit) = block()
-    }
-
     private val port = RecordingPort()
-    private val commands = RenderCommands(immediate, port)
+    private val commands = RenderCommands(port)
 
     @Test
     fun commandsBeforeAttach_onlyUpdateState() {
         commands.setGoggles(true)
         commands.setLens(LensState(offsetMm = 1.5f))
         commands.loadPreset("x", 3, true, listOf("/t"))
+        commands.drain()
         assertTrue(port.calls.isEmpty())
         assertEquals(true, commands.state.value.goggles)
         assertEquals(PresetLoad(3, "x"), commands.state.value.preset)
@@ -55,12 +54,33 @@ class RenderCommandsTest {
     }
 
     @Test
+    fun attach_dropsQueuedCommandsInFavorOfReplay() {
+        commands.attach(1)
+        commands.setGoggles(true) // queued, not yet drained
+        port.calls.clear()
+        commands.attach(2)
+        commands.drain()
+        assertEquals(1, port.calls.count { it.startsWith("goggles(") })
+    }
+
+    @Test
+    fun liveCommands_applyOnlyWhenDrained() {
+        commands.attach(1)
+        port.calls.clear()
+        commands.setGoggles(true)
+        assertTrue(port.calls.isEmpty())
+        commands.drain()
+        assertEquals(listOf("goggles(1,true)"), port.calls)
+    }
+
+    @Test
     fun menuPreview_forcesSingleView() {
         commands.attach(1)
         port.calls.clear()
         commands.setGoggles(true)
         commands.setMenuPreview(true)
         commands.setMenuPreview(false)
+        commands.drain()
         assertEquals(listOf("goggles(1,true)", "goggles(1,false)", "goggles(1,true)"), port.calls)
         assertEquals(true, commands.state.value.effectiveGoggles)
     }
@@ -75,8 +95,26 @@ class RenderCommandsTest {
     @Test
     fun drawWithoutAttach_isNoOp() {
         assertEquals(0L, commands.attachedHandle)
+        assertEquals(0L, commands.handleForCurrentThread())
         commands.setTransition(TransitionState())
+        commands.drain()
         assertTrue(port.calls.isEmpty())
+    }
+
+    @Test
+    fun nonOwnerThread_seesNoHandleAndCannotDrain() {
+        commands.attach(1)
+        port.calls.clear()
+        commands.setGoggles(true)
+        var seen = -1L
+        thread {
+            seen = commands.handleForCurrentThread()
+            commands.drain()
+        }.join()
+        assertEquals(0L, seen)
+        assertTrue(port.calls.isEmpty())
+        commands.drain()
+        assertEquals(listOf("goggles(1,true)"), port.calls)
     }
 
     @Test
@@ -86,8 +124,32 @@ class RenderCommandsTest {
         commands.loadPreset("a", 5, true, emptyList())
         commands.loadPreset("b", 4, true, emptyList())
         commands.loadIdle(3)
+        commands.drain()
         assertEquals(5L, commands.state.value.preset?.requestId)
         assertEquals(1, port.calls.count { it.startsWith("load(") || it.startsWith("idle(") })
+    }
+
+    @Test
+    fun concurrentLoads_neverRegress() {
+        commands.attach(1)
+        port.calls.clear()
+        val start = CountDownLatch(1)
+        val workers = (0 until 4).map { w ->
+            thread {
+                start.await()
+                for (i in 0 until 500) {
+                    val id = (i * 4 + w + 1).toLong()
+                    if (id % 2 == 0L) commands.loadPreset("p$id", id, true, emptyList()) else commands.loadIdle(id)
+                }
+            }
+        }
+        start.countDown()
+        workers.forEach { it.join() }
+        commands.drain()
+        val ids = port.calls.mapNotNull { Regex("""(?:load\(1,[^,]*,|idle\(1,)(\d+)""").find(it)?.groupValues?.get(1)?.toLong() }
+        assertEquals(ids.sorted(), ids) // submissions never go backwards
+        assertEquals(2000L, commands.state.value.preset?.requestId)
+        assertEquals(2000L, ids.last())
     }
 
     @Test
@@ -95,6 +157,7 @@ class RenderCommandsTest {
         commands.attach(1)
         port.calls.clear()
         commands.loadPreset("x", 9, true, listOf("/a", "/b"))
+        commands.drain()
         assertEquals(listOf("texturePaths(1,/a, /b)", "load(1,x,9,true)"), port.calls)
     }
 }

@@ -24,11 +24,20 @@ Java_dev_koggles_NativeBridge_nativeInit(JNIEnv*, jobject) {
     Engine::instance();
 }
 
+// Reads `frames` stereo frames from the start of the direct buffer (its position is ignored).
+// Calls whose frame count exceeds the buffer's capacity are rejected.
 JNIEXPORT void JNICALL
 Java_dev_koggles_NativeBridge_pushPcmFloat(JNIEnv* env, jobject, jobject buf, jint frames) {
+    if (buf == nullptr || frames <= 0) return;
     auto* data = static_cast<const float*>(env->GetDirectBufferAddress(buf));
-    if (data == nullptr || frames <= 0) {
+    const jlong capacityFloats = env->GetDirectBufferCapacity(buf);
+    if (data == nullptr || capacityFloats < 0) {
         __android_log_print(ANDROID_LOG_WARN, "Koggles", "pushPcmFloat: not a direct buffer, ignored");
+        return;
+    }
+    if (static_cast<jlong>(frames) > capacityFloats / 2) {
+        __android_log_print(ANDROID_LOG_WARN, "Koggles", "pushPcmFloat: %d frames exceed capacity %lld floats, ignored",
+                            frames, static_cast<long long>(capacityFloats));
         return;
     }
     Engine::instance().audio().writeStereo(data, static_cast<size_t>(frames));
