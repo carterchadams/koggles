@@ -1,15 +1,31 @@
 package dev.koggles
 
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStore
 import dev.koggles.audio.AudioSession
+import dev.koggles.audio.AudioSnapshot
 import dev.koggles.audio.NativePcmSink
 import dev.koggles.audio.PcmGate
 import dev.koggles.audio.PlaybackCaptureSource
 import dev.koggles.audio.Source
 import dev.koggles.audio.UnavailableSource
 import dev.koggles.audio.VisualizerSource
+import dev.koggles.presets.PresetLibrary
 import dev.koggles.render.NativeRendererPort
 import dev.koggles.render.RenderCommands
+import dev.koggles.settings.Settings
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+
+/** The one preferences file; [Settings] and [PresetLibrary] use disjoint key prefixes in it. */
+private val Context.kogglesStore: DataStore<Preferences> by preferencesDataStore("koggles")
 
 /** Process-wide singletons. Later tasks add services here as `val`s. */
 object AppGraph {
@@ -22,6 +38,12 @@ object AppGraph {
     lateinit var audio: AudioSession
         private set
 
+    lateinit var settings: Settings
+        private set
+
+    lateinit var library: PresetLibrary
+        private set
+
     /** Every PCM producer pushes through this gate, tagged with its source generation. */
     val pcmGate = PcmGate(NativePcmSink)
 
@@ -29,6 +51,11 @@ object AppGraph {
 
     fun init(app: KogglesApp) {
         this.app = app
+        settings = Settings(app.kogglesStore)
+        library = PresetLibrary(app.kogglesStore)
+        // One small blocking read at process start so the audio machine begins with the persisted
+        // source and explainer flag; DataStore reads on its own IO scope, so this cannot deadlock main.
+        val persisted = runBlocking { settings.values.first() }
         renderCommands = RenderCommands(NativeRendererPort(app.resources.displayMetrics.xdpi))
         audio = AudioSession(
             factory = { source, consent, generation ->
@@ -40,7 +67,14 @@ object AppGraph {
             },
             gate = pcmGate,
             scope = appScope,
-            explainerStore = {}, // in-memory until Task 15 persists it
+            explainerStore = { settings.update { it.copy(explainerSeen = true) } },
+            initial = AudioSnapshot(source = persisted.source, explainerSeen = persisted.explainerSeen),
         )
+        // SelectSource only changes the snapshot; persist each distinct source after the initial one.
+        appScope.launch {
+            audio.snapshot.map { it.source }.distinctUntilChanged().drop(1).collect { source ->
+                settings.update { it.copy(source = source) }
+            }
+        }
     }
 }
