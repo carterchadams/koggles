@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <string>
 
+#include <cardboard.h>
+
 #include "../renderer/engine.h"
 #include "../renderer/goggles.h"
 #include "../renderer/renderer.h"
@@ -129,6 +131,27 @@ Java_dev_koggles_NativeBridge_rendererLoadPresetData(JNIEnv* env, jobject, jlong
 JNIEXPORT void JNICALL
 Java_dev_koggles_NativeBridge_rendererLoadIdle(JNIEnv*, jobject, jlong h, jlong requestId) {
     if (h != 0) asRenderer(h)->loadIdle(requestId);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetGoggles(JNIEnv*, jobject, jlong h, jboolean on) {
+    if (h != 0) asRenderer(h)->setGoggles(on == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetLens(JNIEnv*, jobject, jlong h, jfloat offsetMm, jboolean distortion,
+                                              jfloat xdpi) {
+    if (h != 0) asRenderer(h)->setLens(offsetMm, distortion == JNI_TRUE, xdpi);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_dev_koggles_NativeBridge_rendererGogglesActive(JNIEnv*, jobject, jlong h) {
+    return h != 0 && asRenderer(h)->gogglesActive() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jint JNICALL
+Java_dev_koggles_NativeBridge_viewerParamsChangedCount(JNIEnv*, jobject) {
+    return CardboardQrCode_getDeviceParamsChangedCount();
 }
 
 JNIEXPORT jint JNICALL

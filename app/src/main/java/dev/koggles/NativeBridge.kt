@@ -42,4 +42,12 @@ object NativeBridge {
     external fun rendererLoadPresetData(h: Long, data: String, requestId: Long, smooth: Boolean)
     external fun rendererLoadIdle(h: Long, requestId: Long)
     external fun rendererLastGlError(h: Long): Int
+    external fun rendererSetGoggles(h: Long, on: Boolean)
+    external fun rendererSetLens(h: Long, offsetMm: Float, distortion: Boolean, xdpi: Float)
+
+    /** Diagnostic, any thread: whether the renderer is in goggles mode. */
+    external fun rendererGogglesActive(h: Long): Boolean
+
+    /** Cardboard's counter of saved viewer-profile changes (increments after a QR scan). */
+    external fun viewerParamsChangedCount(): Int
 }

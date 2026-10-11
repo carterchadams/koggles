@@ -1,10 +1,14 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include <projectM-4/projectM.h>
+
+#include "eye_capture.h"
+#include "goggles.h"
 
 namespace koggles {
 
@@ -22,8 +26,24 @@ public:
     void loadIdle(int64_t requestId);
     int lastGlError() const { return lastGlError_; }
 
+    void setGoggles(bool on);
+    void setLens(float offsetMm, bool distortion, float xdpi);
+    bool gogglesActive() const { return goggles_.load(); }
+
 private:
+    void setProjectMSize(int w, int h);
+
     projectm_handle pm_ = nullptr;
+    std::atomic<bool> goggles_{false};
+    float lensOffsetMm_ = 0.f;
+    bool lensDistortion_ = true;
+    float xdpi_ = 0.f;
+    int width_ = 0;
+    int height_ = 0;
+    int pmWidth_ = 0;
+    int pmHeight_ = 0;
+    EyeCapture eye_;
+    Goggles goggles2d_;
     std::vector<float> pcm_;  // 2 * projectm_pcm_get_max_samples() interleaved floats
     int lastGlError_ = 0;
 };

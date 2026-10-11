@@ -9,6 +9,10 @@ object DebugHooks {
         activity.visualizerView?.let { dev.koggles.debug.DebugSourceToggle.install(it) }
     }
 
+    /** Debug lens keys (Task 11): see [dev.koggles.debug.DebugLensKeys]. */
+    fun onKeyEvent(activity: MainActivity, event: android.view.KeyEvent): Boolean =
+        dev.koggles.debug.DebugLensKeys.onKeyEvent(activity, event)
+
     /** GL thread. G1: autoload the probe preset with requestId 1 (removed in Task 19). */
     fun onRendererReady(handle: Long) {
         val ctx = appContext ?: return
