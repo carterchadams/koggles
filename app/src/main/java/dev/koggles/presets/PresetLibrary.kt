@@ -1,5 +1,7 @@
 package dev.koggles.presets
 
+import dev.koggles.settings.orEmptyOnIoError
+
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -37,7 +39,7 @@ class PresetLibrary(private val store: DataStore<Preferences>) {
     }
 
     private fun set(k: Preferences.Key<Set<String>>): Flow<Set<String>> =
-        store.data.map { it[k].orEmpty() }.distinctUntilChanged()
+        store.data.orEmptyOnIoError().map { it[k].orEmpty() }.distinctUntilChanged()
 
     private companion object {
         val DISABLED = stringSetPreferencesKey("library.disabledPacks")

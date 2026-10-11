@@ -1,9 +1,7 @@
 package dev.koggles
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.preferences.preferencesDataStoreFile
+import dev.koggles.settings.KogglesStore
 import dev.koggles.audio.AudioSession
 import dev.koggles.audio.AudioSnapshot
 import dev.koggles.audio.NativePcmSink
@@ -17,6 +15,9 @@ import dev.koggles.render.NativeRendererPort
 import dev.koggles.render.RenderCommands
 import dev.koggles.settings.Settings
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
@@ -25,7 +26,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /** The one preferences file; [Settings] and [PresetLibrary] use disjoint key prefixes in it. */
-private val Context.kogglesStore: DataStore<Preferences> by preferencesDataStore("koggles")
 
 /** Process-wide singletons. Later tasks add services here as `val`s. */
 object AppGraph {
@@ -51,8 +51,11 @@ object AppGraph {
 
     fun init(app: KogglesApp) {
         this.app = app
-        settings = Settings(app.kogglesStore)
-        library = PresetLibrary(app.kogglesStore)
+        val store = KogglesStore.create(CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
+            app.preferencesDataStoreFile("koggles")
+        }
+        settings = Settings(store)
+        library = PresetLibrary(store)
         // One small blocking read at process start so the audio machine begins with the persisted
         // source and explainer flag; DataStore reads on its own IO scope, so this cannot deadlock main.
         val persisted = runBlocking { settings.values.first() }

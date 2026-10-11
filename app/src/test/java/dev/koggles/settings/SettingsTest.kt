@@ -94,4 +94,29 @@ class SettingsTest {
         s.update { it.copy(lastPresetKey = null) }
         assertNull(s.values.first().lastPresetKey)
     }
+
+    @Test fun corruptPreferencesFile_recoversToDefaults() = runBlocking {
+        val file = tmp.root.resolve("corrupt.preferences_pb")
+        file.writeBytes(byteArrayOf(0x0a, 0x7f, 0x01, 0x02, 0x03)) // truncated/garbage protobuf
+        val store = KogglesStore.create(scope) { file }
+        assertEquals(SettingsValues(), Settings(store).values.first())
+    }
+
+    @Test fun readIOException_yieldsDefaults() = runBlocking {
+        val failing = object : DataStore<Preferences> {
+            override val data: kotlinx.coroutines.flow.Flow<Preferences> =
+                kotlinx.coroutines.flow.flow { throw java.io.IOException("disk") }
+            override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
+                throw java.io.IOException("disk")
+        }
+        assertEquals(SettingsValues(), Settings(failing).values.first())
+    }
+
+    @Test fun folderScopeWithPipesAndBackslashes_roundTrips() {
+        for (scope in listOf(
+            Scope.Folder("user:A|B", "Dancer"),
+            Scope.Folder("user:A\\|", "x|y\\z"),
+            Scope.PackOnly("user:p|q"),
+        )) assertEquals(scope, decodeScope(scope.encode()))
+    }
 }

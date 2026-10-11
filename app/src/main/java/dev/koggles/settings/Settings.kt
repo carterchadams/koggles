@@ -45,7 +45,7 @@ fun SettingsValues.clamped(): SettingsValues = copy(
 
 /** Settings over the shared `koggles` preferences store. Keys are disjoint from [dev.koggles.presets.PresetLibrary]'s. */
 class Settings(private val store: DataStore<Preferences>) {
-    val values: Flow<SettingsValues> = store.data.map(::read).distinctUntilChanged()
+    val values: Flow<SettingsValues> = store.data.orEmptyOnIoError().map(::read).distinctUntilChanged()
 
     suspend fun update(f: (SettingsValues) -> SettingsValues) {
         store.edit { prefs ->
