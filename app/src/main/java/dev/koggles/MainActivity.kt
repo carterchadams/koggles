@@ -12,7 +12,8 @@ import dev.koggles.ui.UnsupportedScreen
 import dev.koggles.ui.isGles3Supported
 
 class MainActivity : ComponentActivity() {
-    private var visualizer: VisualizerView? = null
+    internal var visualizerView: VisualizerView? = null
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,16 +28,24 @@ class MainActivity : ComponentActivity() {
             setContent { UnsupportedScreen() }
             return
         }
-        visualizer = VisualizerView(this).also { setContentView(it) }
+        visualizerView = VisualizerView(this).also {
+            AppGraph.glExecutor.target = it
+            setContentView(it)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        visualizer?.onResume()
+        visualizerView?.onResume()
     }
 
     override fun onPause() {
-        visualizer?.onPause()
+        visualizerView?.onPause()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (AppGraph.glExecutor.target === visualizerView) AppGraph.glExecutor.target = null
+        super.onDestroy()
     }
 }

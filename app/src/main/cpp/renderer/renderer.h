@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <projectM-4/projectM.h>
 
@@ -23,6 +24,7 @@ public:
 
 private:
     projectm_handle pm_ = nullptr;
+    std::vector<float> pcm_;  // 2 * projectm_pcm_get_max_samples() interleaved floats
     int lastGlError_ = 0;
 };
 

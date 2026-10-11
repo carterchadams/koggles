@@ -6,6 +6,19 @@ object NativeBridge {
         System.loadLibrary("koggles")
     }
 
+    external fun nativeInit()
+
+    /** Any thread. [buf] must be a direct buffer of stereo interleaved floats. */
+    external fun pushPcmFloat(buf: java.nio.FloatBuffer, frames: Int)
+
+    /** Any thread. 8-bit unsigned mono samples (Visualizer waveform). */
+    external fun pushPcmU8(buf: ByteArray, frames: Int)
+    external fun flushAudio()
+    external fun recentRms(): Float
+
+    /** Debug aid: number of native renderers destroyed in this process. */
+    external fun rendererDestroyCount(): Int
+
     external fun rendererCreate(): Long
     external fun rendererDestroy(h: Long)
     external fun rendererSurfaceChanged(h: Long, width: Int, height: Int)

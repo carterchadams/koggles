@@ -18,11 +18,21 @@ set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 set(CMAKE_DISABLE_FIND_PACKAGE_FLEX ON CACHE BOOL "" FORCE)
 set(CMAKE_DISABLE_FIND_PACKAGE_BISON ON CACHE BOOL "" FORCE)
 
+# projectM's version.h.in reads CMAKE_PROJECT_VERSION_* (the top-level project's
+# version), so give it projectM's own pinned version.
+set(CMAKE_PROJECT_VERSION 4.1.7)
+set(CMAKE_PROJECT_VERSION_MAJOR 4)
+set(CMAKE_PROJECT_VERSION_MINOR 1)
+set(CMAKE_PROJECT_VERSION_PATCH 7)
+
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/projectm ${CMAKE_BINARY_DIR}/projectm)
 
 add_library(koggles SHARED
+    core/audio_window.cpp
     jni/native_bridge.cpp
+    renderer/engine.cpp
     renderer/renderer.cpp
 )
+target_include_directories(koggles PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/core)
 target_link_libraries(koggles libprojectM::projectM GLESv3 EGL log android)
 target_link_options(koggles PRIVATE -Wl,-z,max-page-size=16384)

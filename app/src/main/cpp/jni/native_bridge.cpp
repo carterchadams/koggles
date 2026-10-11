@@ -1,16 +1,64 @@
 #include <jni.h>
 
+#include <android/log.h>
+
+#include <atomic>
+#include <cstdint>
 #include <string>
 
+#include "../renderer/engine.h"
 #include "../renderer/renderer.h"
 
+using koggles::Engine;
 using koggles::Renderer;
 
 namespace {
 Renderer* asRenderer(jlong h) { return reinterpret_cast<Renderer*>(h); }
+std::atomic<int> gRendererDestroyCount{0};
 }  // namespace
 
 extern "C" {
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_nativeInit(JNIEnv*, jobject) {
+    Engine::instance();
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_pushPcmFloat(JNIEnv* env, jobject, jobject buf, jint frames) {
+    auto* data = static_cast<const float*>(env->GetDirectBufferAddress(buf));
+    if (data == nullptr || frames <= 0) {
+        __android_log_print(ANDROID_LOG_WARN, "Koggles", "pushPcmFloat: not a direct buffer, ignored");
+        return;
+    }
+    Engine::instance().audio().writeStereo(data, static_cast<size_t>(frames));
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_pushPcmU8(JNIEnv* env, jobject, jbyteArray buf, jint frames) {
+    if (buf == nullptr || frames <= 0) return;
+    const jsize len = env->GetArrayLength(buf);
+    const jsize n = frames < len ? frames : len;
+    jbyte* bytes = env->GetByteArrayElements(buf, nullptr);
+    if (bytes == nullptr) return;
+    Engine::instance().audio().writeMonoU8(reinterpret_cast<const uint8_t*>(bytes), static_cast<size_t>(n));
+    env->ReleaseByteArrayElements(buf, bytes, JNI_ABORT);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_flushAudio(JNIEnv*, jobject) {
+    Engine::instance().audio().clear();
+}
+
+JNIEXPORT jfloat JNICALL
+Java_dev_koggles_NativeBridge_recentRms(JNIEnv*, jobject) {
+    return Engine::instance().audio().lastReadRms();
+}
+
+JNIEXPORT jint JNICALL
+Java_dev_koggles_NativeBridge_rendererDestroyCount(JNIEnv*, jobject) {
+    return gRendererDestroyCount.load();
+}
 
 JNIEXPORT jlong JNICALL
 Java_dev_koggles_NativeBridge_rendererCreate(JNIEnv*, jobject) {
@@ -19,7 +67,9 @@ Java_dev_koggles_NativeBridge_rendererCreate(JNIEnv*, jobject) {
 
 JNIEXPORT void JNICALL
 Java_dev_koggles_NativeBridge_rendererDestroy(JNIEnv*, jobject, jlong h) {
+    if (h == 0) return;
     delete asRenderer(h);
+    gRendererDestroyCount.fetch_add(1);
 }
 
 JNIEXPORT void JNICALL

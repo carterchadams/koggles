@@ -1,5 +1,7 @@
 #include "renderer.h"
 
+#include "engine.h"
+
 #include <GLES3/gl3.h>
 #include <android/log.h>
 
@@ -17,7 +19,7 @@ void onPresetSwitchFailed(const char* /*filename*/, const char* message, void* /
 }
 }  // namespace
 
-Renderer::Renderer() {
+Renderer::Renderer() : pcm_(2 * projectm_pcm_get_max_samples()) {
     pm_ = projectm_create();
     if (pm_ != nullptr) {
         projectm_set_preset_switch_failed_event_callback(pm_, &onPresetSwitchFailed, this);
@@ -37,6 +39,10 @@ void Renderer::surfaceChanged(int w, int h) {
 
 void Renderer::drawFrame() {
     if (pm_ == nullptr) return;
+    const size_t frames = Engine::instance().audio().readNew(pcm_.data(), projectm_pcm_get_max_samples());
+    if (frames > 0) {
+        projectm_pcm_add_float(pm_, pcm_.data(), static_cast<unsigned int>(frames), PROJECTM_STEREO);
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     projectm_opengl_render_frame(pm_);
     lastGlError_ = static_cast<int>(glGetError());

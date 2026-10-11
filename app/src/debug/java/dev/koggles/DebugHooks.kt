@@ -8,10 +8,11 @@ object DebugHooks {
         appContext = activity.applicationContext
     }
 
-    /** GL thread. G1: autoload the probe preset with requestId 1. */
+    /** GL thread. G1: autoload the probe preset with requestId 1 (removed in Task 19). */
     fun onRendererReady(handle: Long) {
         val ctx = appContext ?: return
+        if (AppGraph.renderCommands.state.value.preset != null) return
         val data = ctx.assets.open("g1/ok.milk").bufferedReader().use { it.readText() }
-        NativeBridge.rendererLoadPresetData(handle, data, 1L, false)
+        AppGraph.renderCommands.loadPreset(data, 1L, false, emptyList())
     }
 }
