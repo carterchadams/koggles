@@ -16,7 +16,8 @@ interface RendererPort {
 }
 
 class NativeRendererPort(private val xdpi: Float) : RendererPort {
-    override fun setTexturePaths(h: Long, paths: List<String>) {} // wired in Task 12
+    override fun setTexturePaths(h: Long, paths: List<String>) =
+        NativeBridge.rendererSetTextureSearchPaths(h, paths.toTypedArray())
     override fun setTransition(h: Long, t: TransitionState) {} // wired in Task 19
     override fun setGoggles(h: Long, on: Boolean) {} // wired in Task 11
     override fun setLens(h: Long, lens: LensState) {} // wired in Task 11

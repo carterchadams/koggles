@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <vector>
 #include <string>
 
 #include "../renderer/engine.h"
@@ -129,6 +130,26 @@ Java_dev_koggles_NativeBridge_rendererLoadPresetData(JNIEnv* env, jobject, jlong
 JNIEXPORT void JNICALL
 Java_dev_koggles_NativeBridge_rendererLoadIdle(JNIEnv*, jobject, jlong h, jlong requestId) {
     if (h != 0) asRenderer(h)->loadIdle(requestId);
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetTextureSearchPaths(JNIEnv* env, jobject, jlong h,
+                                                            jobjectArray paths) {
+    if (h == 0 || paths == nullptr) return;
+    const jsize n = env->GetArrayLength(paths);
+    std::vector<std::string> list;
+    list.reserve(static_cast<size_t>(n));
+    for (jsize i = 0; i < n; ++i) {
+        auto s = static_cast<jstring>(env->GetObjectArrayElement(paths, i));
+        if (s == nullptr) continue;
+        const char* chars = env->GetStringUTFChars(s, nullptr);
+        if (chars != nullptr) {
+            list.emplace_back(chars);
+            env->ReleaseStringUTFChars(s, chars);
+        }
+        env->DeleteLocalRef(s);
+    }
+    asRenderer(h)->setTextureSearchPaths(list);
 }
 
 JNIEXPORT jint JNICALL
