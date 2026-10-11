@@ -11,14 +11,16 @@ data class PersistedGrant(val uri: String, val read: Boolean)
 
 object GrantRules {
     /**
-     * The folder to use: the [active] (last chosen) grant if it is still readable and its [probe]
-     * succeeds, else the first readable grant that probes, else null (no grant, or revoked/deleted).
-     * Preferring [active] means a leftover grant (a release that failed) never shadows the user's
-     * latest choice.
+     * The folder to use. Once the user has chosen one ([active] is set), only that folder counts:
+     * it is returned if still readable and its [probe] succeeds, else null, so its loss is seen as
+     * a loss even when a leftover grant (a release that failed) remains. Without an [active]
+     * record (grants from before it was kept), the first readable grant that probes.
      */
     fun pick(grants: List<PersistedGrant>, active: String? = null, probe: (String) -> Boolean): String? {
-        grants.firstOrNull { it.uri == active && it.read }?.let { if (probe(it.uri)) return it.uri }
-        return grants.firstOrNull { it.read && it.uri != active && probe(it.uri) }?.uri
+        if (active != null) {
+            return grants.firstOrNull { it.uri == active && it.read }?.uri?.takeIf(probe)
+        }
+        return grants.firstOrNull { it.read && probe(it.uri) }?.uri
     }
 
     /**

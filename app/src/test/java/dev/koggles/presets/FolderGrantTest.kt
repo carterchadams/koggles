@@ -35,10 +35,18 @@ class FolderGrantTest {
         assertEquals("content://new", GrantRules.pick(grants, active = "content://new") { true })
     }
 
+    // R2.2 gate 3: once a folder was chosen, only that folder counts. A leftover grant must not
+    // mask its loss (revalidation would keep a dead catalog) or resurrect an old folder.
     @Test
-    fun pickActiveUnusable_fallsBackToFirstReadable() {
+    fun pickActiveUnusable_returnsNull_evenWithLeftoverGrant() {
         val grants = listOf(PersistedGrant("content://old", read = true), PersistedGrant("content://new", read = true))
-        assertEquals("content://old", GrantRules.pick(grants, active = "content://new") { it != "content://new" })
-        assertEquals("content://old", GrantRules.pick(grants, active = "content://missing") { true })
+        assertNull(GrantRules.pick(grants, active = "content://new") { it != "content://new" })
+        assertNull(GrantRules.pick(grants, active = "content://released") { true })
+    }
+
+    @Test
+    fun pickWithoutActive_usesFirstReadable() {
+        val grants = listOf(PersistedGrant("content://old", read = true), PersistedGrant("content://new", read = true))
+        assertEquals("content://old", GrantRules.pick(grants, active = null) { true })
     }
 }
