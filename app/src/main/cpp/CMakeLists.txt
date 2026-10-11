@@ -39,6 +39,7 @@ add_library(koggles SHARED
     core/audio_window.cpp
     core/device_params.cpp
     core/eye_layout.cpp
+    core/frame_stats.cpp
     jni/native_bridge.cpp
     renderer/engine.cpp
     renderer/eye_capture.cpp

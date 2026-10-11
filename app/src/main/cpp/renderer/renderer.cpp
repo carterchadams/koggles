@@ -54,6 +54,12 @@ void Renderer::setLens(float offsetMm, bool distortion, float xdpi) {
 
 void Renderer::drawFrame() {
     if (pm_ == nullptr) return;
+    const auto now = std::chrono::steady_clock::now();
+    if (haveLastFrame_) {
+        frameStats_.add(std::chrono::duration<double, std::milli>(now - lastFrameStart_).count());
+    }
+    lastFrameStart_ = now;
+    haveLastFrame_ = true;
     const size_t frames = Engine::instance().audio().readNew(pcm_.data(), projectm_pcm_get_max_samples());
     if (frames > 0) {
         projectm_pcm_add_float(pm_, pcm_.data(), static_cast<unsigned int>(frames), PROJECTM_STEREO);

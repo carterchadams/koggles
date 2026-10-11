@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -8,6 +10,7 @@
 #include <projectM-4/projectM.h>
 
 #include "eye_capture.h"
+#include "frame_stats.h"
 #include "goggles.h"
 
 namespace koggles {
@@ -31,6 +34,7 @@ public:
     void setGoggles(bool on);
     void setLens(float offsetMm, bool distortion, float xdpi);
     bool gogglesActive() const { return goggles_.load(); }
+    std::array<double, 3> takeFrameStats() { return frameStats_.takeSnapshot(); }
 
 private:
     void setProjectMSize(int w, int h);
@@ -45,6 +49,9 @@ private:
     int pmWidth_ = 0;
     int pmHeight_ = 0;
     EyeCapture eye_;
+    FrameStats frameStats_;
+    std::chrono::steady_clock::time_point lastFrameStart_{};
+    bool haveLastFrame_ = false;
     Goggles goggles2d_;
     std::vector<float> pcm_;  // 2 * projectm_pcm_get_max_samples() interleaved floats
     int lastGlError_ = 0;

@@ -51,6 +51,9 @@ object NativeBridge {
     /** Diagnostic, any thread: whether the renderer is in goggles mode. */
     external fun rendererGogglesActive(h: Long): Boolean
 
+    /** GL thread: {p50 ms, p95 ms, frames} of frame-to-frame time since the last call. */
+    external fun rendererFrameStats(h: Long): DoubleArray
+
     /** Cardboard's counter of saved viewer-profile changes (increments after a QR scan). */
     external fun viewerParamsChangedCount(): Int
 }

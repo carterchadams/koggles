@@ -3,6 +3,7 @@
 #include <GLES3/gl3.h>
 #include <android/log.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <vector>
@@ -148,6 +149,15 @@ Java_dev_koggles_NativeBridge_rendererSetLens(JNIEnv*, jobject, jlong h, jfloat 
 JNIEXPORT jboolean JNICALL
 Java_dev_koggles_NativeBridge_rendererGogglesActive(JNIEnv*, jobject, jlong h) {
     return h != 0 && asRenderer(h)->gogglesActive() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jdoubleArray JNICALL
+Java_dev_koggles_NativeBridge_rendererFrameStats(JNIEnv* env, jobject, jlong h) {
+    std::array<double, 3> s{0.0, 0.0, 0.0};
+    if (h != 0) s = asRenderer(h)->takeFrameStats();
+    jdoubleArray out = env->NewDoubleArray(3);
+    env->SetDoubleArrayRegion(out, 0, 3, s.data());
+    return out;
 }
 
 JNIEXPORT jint JNICALL
