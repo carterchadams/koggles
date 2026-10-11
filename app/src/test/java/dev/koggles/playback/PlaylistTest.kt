@@ -471,4 +471,25 @@ class PlaylistTest {
         p.update(inputs(mixed, interstitials = true))
         assertTrue(skipped in p.reachable())
     }
+
+    @Test fun cancelledInterstitial_returnsDestinationToCycle() {
+        val normals = (0..4).map { "bundled:a/p$it.milk" }.toSet()
+        for (seed in 0 until 20) {
+            val p = withInterstitials(seed)
+            val first = p.next() // interstitial; its destination is reserved
+            p.onLoaded(first.requestId)
+            // Navigation outside the candidate scope cancels the interstitial.
+            val sel = p.select("bundled:a/!t/t0.milk")!!
+            p.onLoaded(sel.requestId)
+            val reached = mutableListOf<String>()
+            repeat(normals.size) {
+                val r = p.next()
+                p.onLoaded(r.requestId)
+                val d = if (r.kind == Kind.Interstitial) p.onInterstitialElapsed(r.requestId)!! else r
+                p.onLoaded(d.requestId)
+                reached += presetKey(d)
+            }
+            assertEquals("seed $seed: every candidate once before the cycle refills", normals, reached.toSet())
+        }
+    }
 }

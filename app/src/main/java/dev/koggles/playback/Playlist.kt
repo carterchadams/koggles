@@ -256,6 +256,11 @@ class Playlist(private val random: Random) {
         latest = r
         latestHistoryIndex = -1
         pendingInterstitial = null
+        // A cancelled interstitial's destination was never played: give it back to the cycle (D12).
+        pendingDestination?.let { d ->
+            val playsIt = (target as? Target.Preset)?.ref?.key == d.key
+            if (!playsIt && d.key in candidateKeys && d.key !in remaining) remaining.add(0, d.key)
+        }
         pendingDestination = null
         current = (target as? Target.Preset)?.ref
         return r
