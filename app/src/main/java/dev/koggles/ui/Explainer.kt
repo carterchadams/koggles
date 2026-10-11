@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,7 +27,13 @@ fun Explainer(onContinue: () -> Unit) {
 }
 
 @Composable
-internal fun MessageScreen(message: String, action: String, onAction: () -> Unit) {
+internal fun MessageScreen(
+    message: String,
+    action: String,
+    onAction: () -> Unit,
+    secondary: String? = null,
+    onSecondary: () -> Unit = {},
+) {
     Column(
         Modifier.fillMaxSize().background(Color.Black).padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -35,5 +42,9 @@ internal fun MessageScreen(message: String, action: String, onAction: () -> Unit
         Text(message, color = Color.White, textAlign = TextAlign.Center)
         Spacer(Modifier.height(24.dp))
         Button(onClick = onAction) { Text(action) }
+        if (secondary != null) {
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = onSecondary) { Text(secondary) }
+        }
     }
 }

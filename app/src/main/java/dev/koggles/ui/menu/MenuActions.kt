@@ -8,7 +8,7 @@ import dev.koggles.settings.SettingsValues
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** Everything the menu sections act on. */
+/** Everything the menu sections act on. [scope] must outlive the menu (writes are not cancelled by closing it). */
 class MenuActions(
     val playback: PlaybackControls,
     val library: PresetLibrary,

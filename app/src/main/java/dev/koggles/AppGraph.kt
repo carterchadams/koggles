@@ -97,7 +97,8 @@ object AppGraph {
     /** Every PCM producer pushes through this gate, tagged with its source generation. */
     val pcmGate = PcmGate(NativePcmSink)
 
-    private val appScope = MainScope()
+    /** Process-lifetime main scope: work that must outlive any activity or composition. */
+    val appScope = MainScope()
 
     fun init(app: KogglesApp) {
         this.app = app

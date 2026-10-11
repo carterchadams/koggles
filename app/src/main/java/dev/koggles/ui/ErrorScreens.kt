@@ -10,6 +10,7 @@ fun AudioErrorScreen(
     state: AudioState,
     onRetry: () -> Unit,
     onSwitchToHighQuality: () -> Unit,
+    onSwitchToStandard: () -> Unit,
 ) {
     when (state) {
         is AudioState.PermissionDenied -> MessageScreen(
@@ -23,12 +24,18 @@ fun AudioErrorScreen(
                 "Switch to High quality",
                 onSwitchToHighQuality,
             )
-            FailReason.CaptureStartFailed -> MessageScreen("Audio capture couldn't start.", "Try again", onRetry)
-            FailReason.ConsentDeclined -> MessageScreen("Audio capture needs your permission.", "Try again", onRetry)
-            FailReason.CaptureLost -> MessageScreen("Audio capture stopped.", "Try again", onRetry)
+            // High quality failures cover the menu: offer the way back to Standard here.
+            FailReason.CaptureStartFailed ->
+                MessageScreen("Audio capture couldn't start.", "Try again", onRetry, STANDARD, onSwitchToStandard)
+            FailReason.ConsentDeclined ->
+                MessageScreen("Audio capture needs your permission.", "Try again", onRetry, STANDARD, onSwitchToStandard)
+            FailReason.CaptureLost ->
+                MessageScreen("Audio capture stopped.", "Try again", onRetry, STANDARD, onSwitchToStandard)
         }
         else -> Unit
     }
 }
+
+private const val STANDARD = "Use Standard audio"
 
 fun AudioState.isAudioError(): Boolean = this is AudioState.PermissionDenied || this is AudioState.Failed

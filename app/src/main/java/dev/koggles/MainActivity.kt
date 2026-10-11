@@ -34,7 +34,6 @@ import dev.koggles.audio.Source
 import dev.koggles.render.ViewerQr
 import dev.koggles.render.VisualizerView
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.testTag
@@ -124,6 +123,7 @@ class MainActivity : ComponentActivity() {
                                 state = state,
                                 onRetry = { audio.dispatch(AudioEvent.Retry) },
                                 onSwitchToHighQuality = { audio.dispatch(AudioEvent.SelectSource(Source.HighQuality)) },
+                                onSwitchToStandard = { audio.dispatch(AudioEvent.SelectSource(Source.Standard)) },
                             )
                         }
                     }
@@ -152,7 +152,6 @@ class MainActivity : ComponentActivity() {
 
     @androidx.compose.runtime.Composable
     private fun Menu() {
-        val scope = rememberCoroutineScope()
         val now by AppGraph.playbackControls.nowPlaying.collectAsStateWithLifecycle()
         val values by AppGraph.settings.values.collectAsStateWithLifecycle(SettingsValues())
         val library by AppGraph.libraryRepo.state.collectAsStateWithLifecycle()
@@ -161,12 +160,13 @@ class MainActivity : ComponentActivity() {
         val skipped by AppGraph.library.skipped.collectAsStateWithLifecycle(emptySet())
         val snapshot by audio.snapshot.collectAsStateWithLifecycle()
         val silence by AppGraph.silenceHint.collectAsStateWithLifecycle()
-        val actions = remember(scope) {
+        val actions = remember {
             MenuActions(
                 playback = AppGraph.playbackControls,
                 library = AppGraph.library,
                 settings = AppGraph.settings,
-                scope = scope,
+                // Not the composition's scope: a committed setting must survive closing the menu.
+                scope = AppGraph.appScope,
                 dispatchAudio = audio::dispatch,
                 onChooseFolder = {
                     highlightChooseFolder = false
