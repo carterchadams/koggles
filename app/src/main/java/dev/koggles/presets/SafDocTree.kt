@@ -30,6 +30,13 @@ class SafDocTree(private val resolver: ContentResolver, val treeUri: Uri) : DocT
             throw IOException("cannot list ${node.id}", e)
         } ?: throw IOException("cannot list ${node.id}")
         return cursor.use { c ->
+            // A provider still loading, or reporting an error, returns a partial listing: treat it as a
+            // read failure so the indexer records it and the texture mirror keeps its cache.
+            requireCompleteListing(
+                loading = c.extras?.getBoolean(DocumentsContract.EXTRA_LOADING, false) == true,
+                error = c.extras?.getString(DocumentsContract.EXTRA_ERROR),
+                what = node.id,
+            )
             val out = ArrayList<DocNode>(c.count.coerceAtLeast(0))
             while (c.moveToNext()) {
                 val id = c.getString(0) ?: continue
@@ -61,4 +68,10 @@ class SafDocTree(private val resolver: ContentResolver, val treeUri: Uri) : DocT
             Document.COLUMN_LAST_MODIFIED,
         )
     }
+}
+
+/** Throws if a directory listing is partial (provider still loading) or carries a provider error. */
+internal fun requireCompleteListing(loading: Boolean, error: String?, what: String) {
+    if (loading) throw IOException("listing of $what is still loading")
+    if (error != null) throw IOException("listing of $what failed: $error")
 }
