@@ -61,6 +61,8 @@ class PlaybackController(
     /** The library state most recently applied to the playlist (null until the first update). */
     private val applied = MutableStateFlow<LibraryState?>(null)
 
+    private var lastLoadedId = -1L
+
     init {
         scope.launch {
             combine(libraryState, library.disabledPacks, library.favorites, library.skipped, settings.values) {
@@ -87,6 +89,8 @@ class PlaybackController(
     fun start() {
         scope.launch {
             applied.first { it?.bundledReady == true }
+            // Navigation while startup waits wins: startup must not issue a newer request over it.
+            val before = playlist.latestRequestId
             val lastKey = values.lastPresetKey
             if (lastKey != null && lastKey.startsWith("user:")) {
                 // Bundled readiness is published before the grant probe: wait for the probe, then
@@ -95,6 +99,7 @@ class PlaybackController(
                     applied.first { it != null && it.userProbed && (!it.hasGrant || !it.userIndexing) }
                 }
             }
+            if (playlist.latestRequestId != before) return@launch
             process(playlist.start(values.lastPresetKey))
         }
     }
@@ -106,7 +111,10 @@ class PlaybackController(
 
     suspend fun skip() {
         val key = playlist.current?.key ?: return
+        val id = playlist.latestRequestId
         library.setSkipped(key, true)
+        // Navigation during the write moved on: the skip stays persisted, playback is left alone.
+        if (id != playlist.latestRequestId) return
         process(playlist.skipCurrent())
     }
 
@@ -140,6 +148,9 @@ class PlaybackController(
     }
 
     override fun onPresetLoaded(requestId: Long) {
+        // A recreated renderer replays the current preset under its original id: report it once.
+        if (requestId == lastLoadedId) return
+        lastLoadedId = requestId
         playlist.onLoaded(requestId)
         val issued = lastIssued ?: return
         val ref = (issued.target as? Target.Preset)?.ref ?: return

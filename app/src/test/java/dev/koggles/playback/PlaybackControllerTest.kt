@@ -14,6 +14,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -34,9 +35,13 @@ class PlaybackControllerTest {
 
     private class MemPrefs : DataStore<Preferences> {
         private val s = MutableStateFlow(emptyPreferences())
+        /** When set, every write suspends until it completes. */
+        var writeGate: CompletableDeferred<Unit>? = null
         override val data = s
-        override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
-            transform(s.value).also { s.value = it }
+        override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences {
+            writeGate?.await()
+            return transform(s.value).also { s.value = it }
+        }
     }
 
     private class FakeSink : RenderSink {
@@ -135,6 +140,42 @@ class PlaybackControllerTest {
         libState.value = state(ready = true, cat = catalogOf(pack("bundled:p", "p0.milk"), pack("user:u", "u0.milk")), grant = true)
         advanceUntilIdle()
         assertEquals("user:u/u0.milk", loadedKey(sink.loads().single()))
+    }
+
+    @Test fun start_userNavigatesDuringWait_startupDoesNotOverride() = runTest {
+        settings.update { it.copy(lastPresetKey = "user:u/u0.milk") }
+        libState.value = state(ready = true, probed = false)
+        val c = controller()
+        c.start(); advanceTimeBy(500)
+        c.select(keys[2]); runCurrent()
+        advanceTimeBy(3_100); advanceUntilIdle()
+        assertEquals(keys[2], loadedKey(sink.loads().single()))
+    }
+
+    @Test fun skip_navigationDuringPersist_keepsNewerPlayback() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val a = c.nowPlaying.value.ref!!.key
+        prefs.writeGate = CompletableDeferred()
+        val skipping = launch { c.skip() }
+        runCurrent()
+        c.next(); advanceUntilIdle()
+        val b = c.nowPlaying.value.ref!!.key
+        prefs.writeGate!!.complete(Unit); skipping.join(); advanceUntilIdle()
+        assertTrue(a in library.skipped.first())
+        assertEquals(b, c.nowPlaying.value.ref!!.key)
+        assertEquals(2, sink.loads().size)
+    }
+
+    @Test fun replayedLoadedOutcome_doesNotFloodHistory() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val a = c.nowPlaying.value.ref!!.key
+        c.onPresetLoaded(c.nowPlayingRequestId())
+        c.next(); advanceUntilIdle()
+        // Renderer recreation replays B with its original id, many times.
+        repeat(150) { c.onPresetLoaded(c.nowPlayingRequestId()) }
+        advanceUntilIdle()
+        c.previous(); advanceUntilIdle()
+        assertEquals(a, c.nowPlaying.value.ref!!.key)
     }
 
     @Test fun switchRequested_staleRequestIgnored() = runTest {
