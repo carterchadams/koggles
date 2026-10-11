@@ -38,7 +38,14 @@ class LoadGateActivity : Activity() {
         setContentView(view)
         val goggles = intent.getBooleanExtra("goggles", false)
         commands.setGoggles(goggles)
-        if (intent.getBooleanExtra("collision", false)) runCollision() else runCycle(goggles)
+        try {
+            if (intent.getBooleanExtra("collision", false)) runCollision() else runCycle(goggles)
+        } catch (e: java.io.IOException) {
+            // Inputs live in filesDir/g4 (adb-pushed files under Android/data are unreadable on API 37);
+            // see docs/verification/G4-rendering.md for the setup commands.
+            Log.e(TAG, "missing G4 inputs in ${File(filesDir, "g4")}: ${e.message}")
+            finish()
+        }
         main.postDelayed(::logStats, 10_000)
     }
 
