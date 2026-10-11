@@ -22,17 +22,19 @@ internal fun LazyListScope.nowPlayingSection(
         Text(ref?.name ?: "Idle", style = MaterialTheme.typography.bodyLarge)
         if (packName != null) Text(packName, style = MaterialTheme.typography.bodySmall)
         now.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        // Six equal shares of the row: every control stays visible and tappable on narrow phones.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            GlyphButton("◀", "Previous") { actions.playback.previous() }
-            GlyphButton("▶", "Next") { actions.playback.next() }
-            GlyphButton("🔀", "Random") { actions.playback.random() }
-            GlyphButton(if (locked) "🔒" else "🔓", if (locked) "Unlock" else "Lock") {
+            val cell = Modifier.weight(1f)
+            GlyphButton("◀", "Previous", cell) { actions.playback.previous() }
+            GlyphButton("▶", "Next", cell) { actions.playback.next() }
+            GlyphButton("🔀", "Random", cell) { actions.playback.random() }
+            GlyphButton(if (locked) "🔒" else "🔓", if (locked) "Unlock" else "Lock", cell) {
                 actions.launch { actions.playback.setLocked(!locked) }
             }
-            GlyphButton(if (favorite) "★" else "☆", "Favorite", enabled = ref != null) {
+            GlyphButton(if (favorite) "★" else "☆", "Favorite", cell, enabled = ref != null) {
                 actions.launch { actions.playback.toggleFavorite() }
             }
-            GlyphButton("⊘", "Skip", enabled = ref != null) { actions.launch { actions.playback.skip() } }
+            GlyphButton("⊘", "Skip", cell, enabled = ref != null) { actions.launch { actions.playback.skip() } }
         }
     }
 }

@@ -2,6 +2,7 @@ package dev.koggles.ui.menu
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -70,8 +71,19 @@ internal fun StepSlider(
 
 /** A compact glyph button with an accessible name. */
 @Composable
-internal fun GlyphButton(glyph: String, description: String, enabled: Boolean = true, onClick: () -> Unit) {
-    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.semantics { contentDescription = description }) {
+internal fun GlyphButton(
+    glyph: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(0.dp),
+        modifier = modifier.semantics { contentDescription = description },
+    ) {
         Text(glyph, style = MaterialTheme.typography.titleLarge)
     }
 }
