@@ -13,6 +13,18 @@ void cardboardInitAndroid(JavaVM* vm, jobject context) {
     std::call_once(once, [&] { Cardboard_initializeAndroid(vm, context); });
 }
 
+bool cardboardLensProbe(int width, int height) {
+    uint8_t* params = nullptr;
+    int size = 0;
+    CardboardQrCode_getCardboardV1DeviceParams(&params, &size);
+    if (params == nullptr || size <= 0) return false;
+    CardboardLensDistortion* lens = CardboardLensDistortion_create(params, size, width, height);
+    CardboardQrCode_destroy(params);
+    if (lens == nullptr) return false;
+    CardboardLensDistortion_destroy(lens);
+    return true;
+}
+
 void Goggles::release() {
     if (distortion_ != nullptr) {
         CardboardDistortionRenderer_destroy(distortion_);

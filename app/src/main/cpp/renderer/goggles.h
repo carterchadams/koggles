@@ -11,6 +11,9 @@ namespace koggles {
 // Cardboard API call; MainActivity does it from onCreate (D5).
 void cardboardInitAndroid(JavaVM* vm, jobject context);
 
+// Creates and destroys a lens distortion from the Cardboard V1 viewer params.
+bool cardboardLensProbe(int width, int height);
+
 // Goggles (lens-distortion) output. Stub until Task 11: it owns nothing yet,
 // and release() is a teardown sanity check that is safe to call any number
 // of times, including before anything was created.
