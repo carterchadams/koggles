@@ -199,12 +199,23 @@ class Playlist(private val random: Random) {
         }
     }
 
-    private fun inScope(ref: PresetRef, inp: PlaylistInputs): Boolean = when (val s = inp.scope) {
+    private fun inScope(ref: PresetRef, inp: PlaylistInputs): Boolean = when (val s = effectiveScope(inp)) {
         Scope.AllEnabled -> true
         Scope.Favorites -> ref.key in inp.favorites
         is Scope.PackOnly -> ref.packId == s.packId
         is Scope.Folder -> ref.packId == s.packId &&
             (ref.folder == s.folder || ref.folder.startsWith(s.folder + "/"))
+    }
+
+    /**
+     * Spec §7: a pack or folder scope whose pack is no longer in the catalog (the user folder was
+     * lost) plays all enabled packs instead. The persisted scope is untouched, so it applies again
+     * once the pack returns.
+     */
+    private fun effectiveScope(inp: PlaylistInputs): Scope = when (val s = inp.scope) {
+        is Scope.PackOnly -> if (inp.catalog.pack(s.packId) == null) Scope.AllEnabled else s
+        is Scope.Folder -> if (inp.catalog.pack(s.packId) == null) Scope.AllEnabled else s
+        else -> s
     }
 
     /** The next key of the shuffle cycle (D12), or null when there are no candidates. */

@@ -90,6 +90,25 @@ class PlaylistTest {
         assertEquals(setOf("bundled:a/a1.milk", "user:b/b0.milk"), p.reachable())
     }
 
+    // Spec §7: a scope naming a pack that disappeared (grant lost) falls back to bundled playback.
+    @Test fun packScope_packGone_playsAllEnabled() {
+        val cat = catalogOf(pack("bundled:a", "a0.milk", "a1.milk"))
+        val p = playlist(cat) { it.copy(scope = Scope.PackOnly("user:b")) }
+        assertEquals(setOf("bundled:a/a0.milk", "bundled:a/a1.milk"), p.reachable())
+    }
+
+    @Test fun folderScope_packGone_playsAllEnabled() {
+        val cat = catalogOf(pack("bundled:a", "a0.milk", "a1.milk"))
+        val p = playlist(cat) { it.copy(scope = Scope.Folder("user:b", "f")) }
+        assertEquals(setOf("bundled:a/a0.milk", "bundled:a/a1.milk"), p.reachable())
+    }
+
+    @Test fun packScope_packPresentButEmpty_stillIdleWithNotice() {
+        val cat = catalogOf(pack("bundled:a", "a0.milk"), pack("user:b", "!t/only-transition.milk"))
+        val p = playlist(cat) { it.copy(scope = Scope.PackOnly("user:b")) }
+        assertIdle(p.next())
+    }
+
     @Test fun scopeFolderOfDisabledPack_isEmpty() {
         val cat = catalogOf(pack("bundled:a", "a0.milk"), pack("user:b", "f/b0.milk", "f/b1.milk"))
         val p = playlist(cat) { it.copy(scope = Scope.Folder("user:b", "f"), disabledPacks = setOf("user:b")) }
