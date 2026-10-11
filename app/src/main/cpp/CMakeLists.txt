@@ -13,6 +13,10 @@ set(ENABLE_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
 set(ENABLE_SYSTEM_PROJECTM_EVAL OFF CACHE BOOL "" FORCE)
 set(ENABLE_SYSTEM_GLM OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+# Use projectm-eval's pre-generated parser/scanner; regenerating them with a host
+# flex/bison would rewrite files inside the pinned submodule.
+set(CMAKE_DISABLE_FIND_PACKAGE_FLEX ON CACHE BOOL "" FORCE)
+set(CMAKE_DISABLE_FIND_PACKAGE_BISON ON CACHE BOOL "" FORCE)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/projectm ${CMAKE_BINARY_DIR}/projectm)
 
