@@ -56,7 +56,10 @@ class LibraryRepository(
 
     /** TextureMirror is not thread-safe: every apply (indexing and lazy rebuilds) runs under this. */
     private val mirrorLock = Mutex()
-    private var userGeneration = 0L
+    @Volatile private var userGeneration = 0L
+
+    /** Generation of the user index whose results are in [state] (0 = none yet). */
+    @Volatile private var publishedGeneration = 0L
 
     init {
         scope.launch { startup() }
@@ -69,12 +72,20 @@ class LibraryRepository(
 
     /** [packId]'s mirrored texture dir (rebuilt first if evicted), then the bundled dir; existing only. */
     suspend fun texturePathsFor(packId: String): List<String> {
+        val generation = publishedGeneration
         val s = _state.value
         var own = s.packTextureDirs[packId]
         if (own != null && !own.isDirectory) {
             val pack = s.catalog.pack(packId)
             own = if (pack != null) {
-                withContext(io) { mirrorLock.withLock { runCatching { mirror.apply(pack) }.getOrNull() } }
+                withContext(io) {
+                    mirrorLock.withLock {
+                        // A refresh started since this state was read: the pack may be stale, and the
+                        // new index owns the mirror now. Never apply a superseded pack.
+                        if (generation != userGeneration) null
+                        else runCatching { mirror.apply(pack) }.getOrNull()
+                    }
+                }
             } else {
                 null
             }
@@ -110,10 +121,13 @@ class LibraryRepository(
         val (generation, previous) = userLock.withLock { ++userGeneration to userJob }
         // Wait for the superseded index to stop: its blocking mirror copies must not overlap ours.
         previous?.cancelAndJoin()
-        val tree = userTree()
+        // FolderGrant probes the provider (IPC): never on the caller's (main) thread.
+        val tree = withContext(io) { userTree() }
+        if (generation != userGeneration) return
         if (tree == null) {
             userLock.withLock {
                 if (generation != userGeneration) return
+                publishedGeneration = generation
                 _state.update {
                     it.copy(
                         catalog = Catalog(bundledPacks),
@@ -147,6 +161,7 @@ class LibraryRepository(
                 ensureActive()
                 userLock.withLock {
                     if (generation != userGeneration) return@withLock
+                    publishedGeneration = generation
                     _state.update {
                         it.copy(
                             catalog = Catalog(bundledPacks + packs),

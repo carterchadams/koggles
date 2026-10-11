@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -184,5 +185,43 @@ class LibraryRepositoryTest {
         val r = LibraryRepository(scope, { bundled }, { bundledTex }, { user }, m, PresetIndexer(Dispatchers.IO), Dispatchers.IO)
         await(r, "mirrored") { "user:Mine" in it.packTextureDirs && !it.userIndexing }
         assertTrue(seen.isNotEmpty() && seen.all { it === user })
+    }
+
+    @Test fun lazyRebuild_afterRefreshStarted_doesNotApplyStalePack() = runBlocking {
+        val oldTreeCopies = java.util.concurrent.atomic.AtomicInteger(0)
+        val release = CountDownLatch(1)
+        val replacement = object : DocTree by FakeDocTree(listOf("Mine/y.milk", "Mine/other.png")) {
+            override fun children(node: DocNode): List<DocNode> {
+                release.await(10, TimeUnit.SECONDS)
+                return FakeDocTree(listOf("Mine/y.milk", "Mine/other.png")).children(node)
+            }
+        }
+        var tree: DocTree = user
+        val m = TextureMirror(tmp.newFolder("gen-cache"), copy = { _, _ -> error("unbound") }, copyFrom = { t, _, f ->
+            if (t === user) oldTreeCopies.incrementAndGet()
+            f.writeBytes(byteArrayOf(1))
+        })
+        val r = LibraryRepository(scope, { bundled }, { bundledTex }, { tree }, m, PresetIndexer(Dispatchers.IO), Dispatchers.IO)
+        await(r, "mirrored") { "user:Mine" in it.packTextureDirs && !it.userIndexing }
+        val copiesBefore = oldTreeCopies.get()
+        r.state.value.packTextureDirs.getValue("user:Mine").deleteRecursively()
+        tree = replacement
+        r.refresh()
+        await(r, "refresh started") { it.userIndexing }
+        r.texturePathsFor("user:Mine") // stale request for the old pack
+        assertEquals("old tree must not be re-mirrored after a refresh began", copiesBefore, oldTreeCopies.get())
+        release.countDown()
+    }
+
+    @Test fun grantProbe_runsOffTheCallerScopeThread() {
+        val probeThread = java.util.concurrent.atomic.AtomicReference<Thread>()
+        val single = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val mainLike = CoroutineScope(SupervisorJob() + single.asCoroutineDispatcher())
+        val scopeThread = single.submit<Thread> { Thread.currentThread() }.get()
+        val r = LibraryRepository(mainLike, { bundled }, { bundledTex }, { probeThread.set(Thread.currentThread()); null },
+            mirror, PresetIndexer(Dispatchers.IO), Dispatchers.IO)
+        await(r, "ready") { it.bundledReady && !it.userIndexing }
+        assertTrue("userTree() must not run on the scope's (main) thread", probeThread.get() !== scopeThread)
+        mainLike.cancel(); single.shutdown()
     }
 }
