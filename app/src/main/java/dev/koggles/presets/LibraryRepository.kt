@@ -70,27 +70,33 @@ class LibraryRepository(
         scope.launch { if (_state.value.bundledReady) startUserIndex() }
     }
 
-    /** [packId]'s mirrored texture dir (rebuilt first if evicted), then the bundled dir; existing only. */
+    /**
+     * [packId]'s mirrored texture dir, then the bundled dir (existing only). If any of a user pack's
+     * textures is missing — evicted directory or file, or an earlier failed copy — the mirror is
+     * re-applied first (spec §5.2), unless a newer index has superseded this state.
+     */
     suspend fun texturePathsFor(packId: String): List<String> {
         val generation = publishedGeneration
         val s = _state.value
         var own = s.packTextureDirs[packId]
-        if (own != null && !own.isDirectory) {
-            val pack = s.catalog.pack(packId)
-            own = if (pack != null) {
-                withContext(io) {
-                    mirrorLock.withLock {
-                        // A refresh started since this state was read: the pack may be stale, and the
-                        // new index owns the mirror now. Never apply a superseded pack.
-                        if (generation != userGeneration) null
-                        else runCatching { mirror.apply(pack) }.getOrNull()
-                    }
+        val pack = s.catalog.pack(packId)
+        if (pack != null && packId.startsWith("user:") && mirrorIncomplete(pack, own)) {
+            own = withContext(io) {
+                mirrorLock.withLock {
+                    // A refresh started since this state was read: the pack may be stale, and the
+                    // new index owns the mirror now. Never apply a superseded pack.
+                    if (generation != userGeneration) own
+                    else runCatching { mirror.apply(pack) }.getOrDefault(own)
                 }
-            } else {
-                null
             }
         }
         return listOfNotNull(own, s.bundledTextureDir).filter { it.isDirectory }.map { it.absolutePath }
+    }
+
+    private fun mirrorIncomplete(pack: Pack, dir: File?): Boolean {
+        if (pack.textures.isEmpty()) return false
+        if (dir == null || !dir.isDirectory) return true
+        return pack.textures.any { (_, node) -> TextureMirror.isSafeName(node.name) && !File(dir, node.name).isFile }
     }
 
     private suspend fun startup() = coroutineScope {

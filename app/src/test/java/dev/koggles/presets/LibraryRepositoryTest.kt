@@ -240,4 +240,24 @@ class LibraryRepositoryTest {
         assertTrue(s.packTextureDirs.isEmpty())
         assertTrue(s.errors.any { "folder deleted" in it })
     }
+
+    @Test fun missingSingleTexture_isRetriedBeforeReturn() = runBlocking {
+        val r = repo()
+        val s = await(r, "mirrored") { "user:Mine" in it.packTextureDirs && !it.userIndexing }
+        val dir = s.packTextureDirs.getValue("user:Mine")
+        File(dir, "k.png").delete() // directory survives, one texture is gone
+        r.texturePathsFor("user:Mine")
+        assertTrue(File(dir, "k.png").isFile)
+    }
+
+    @Test fun transientCopyFailure_recoversOnNextLoad() = runBlocking {
+        var fail = true
+        val m = TextureMirror(tmp.newFolder("flaky-cache"), { _, f -> if (fail) throw IOException("busy"); f.writeBytes(byteArrayOf(1)) })
+        val r = LibraryRepository(scope, { bundled }, { bundledTex }, { user }, m, PresetIndexer(Dispatchers.IO), Dispatchers.IO)
+        val s = await(r, "indexed") { !it.userIndexing && "user:Mine" in it.packIds() }
+        fail = false
+        val paths = r.texturePathsFor("user:Mine")
+        val dir = File(paths.first())
+        assertTrue(File(dir, "k.png").isFile)
+    }
 }
