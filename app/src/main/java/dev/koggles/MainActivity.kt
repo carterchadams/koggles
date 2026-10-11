@@ -146,8 +146,7 @@ class MainActivity : ComponentActivity() {
 
     private val folderLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uri = result.data?.data ?: return@registerForActivityResult
-        AppGraph.folderGrant.onTreePicked(uri)
-        AppGraph.libraryRepo.refresh()
+        AppGraph.folderPicker.picked(uri.toString()) // grant IPC off main; failures reach Library
     }
 
     @androidx.compose.runtime.Composable

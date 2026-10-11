@@ -13,6 +13,22 @@ object GrantRules {
     /** The first readable grant whose [probe] succeeds, else null (no grant, or revoked/deleted). */
     fun pick(grants: List<PersistedGrant>, probe: (String) -> Boolean): String? =
         grants.firstOrNull { it.read && probe(it.uri) }?.uri
+
+    /**
+     * Grant replacement: [take] the new grant first. If that throws, nothing is released and the
+     * error propagates, so the previous folder stays usable. Then release [others]; a release that
+     * fails (already gone) is ignored.
+     */
+    fun <G> replace(take: () -> Unit, others: List<G>, release: (G) -> Unit) {
+        take()
+        for (g in others) {
+            try {
+                release(g)
+            } catch (e: Exception) {
+                // Already released or revoked; nothing to undo.
+            }
+        }
+    }
 }
 
 /** The single user folder grant (spec §5.1, user packs). */
@@ -36,20 +52,23 @@ class FolderGrant(context: Context) {
             DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents"),
         )
 
-    /** Persists read access to [uri] and releases every other persisted grant. */
-    fun onTreePicked(uri: Uri) {
-        resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        for (p in resolver.persistedUriPermissions) {
-            if (p.uri == uri) continue
-            var flags = 0
-            if (p.isReadPermission) flags = flags or Intent.FLAG_GRANT_READ_URI_PERMISSION
-            if (p.isWritePermission) flags = flags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            try {
+    /**
+     * Persists read access to [uri] and releases every other persisted grant. Provider IPC: call
+     * off the main thread. Throws (e.g. [SecurityException]) when the grant cannot be taken, leaving
+     * existing grants untouched.
+     */
+    fun onTreePicked(uri: String) {
+        val picked = Uri.parse(uri)
+        GrantRules.replace(
+            take = { resolver.takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION) },
+            others = resolver.persistedUriPermissions.filter { it.uri != picked },
+            release = { p ->
+                var flags = 0
+                if (p.isReadPermission) flags = flags or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                if (p.isWritePermission) flags = flags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 resolver.releasePersistableUriPermission(p.uri, flags)
-            } catch (e: SecurityException) {
-                // Already gone; nothing to release.
-            }
-        }
+            },
+        )
     }
 
     private fun probe(uri: String): Boolean = try {

@@ -72,6 +72,11 @@ class LibraryRepository(
         scope.launch { if (_state.value.bundledReady) startUserIndex() }
     }
 
+    /** Shows [message] in the Library section until the next index publication. */
+    fun reportError(message: String) {
+        _state.update { it.copy(errors = it.errors + message) }
+    }
+
     /**
      * [packId]'s mirrored texture dir, then the bundled dir (existing only). If any of a user pack's
      * textures is missing — evicted directory or file, or an earlier failed copy — the mirror is

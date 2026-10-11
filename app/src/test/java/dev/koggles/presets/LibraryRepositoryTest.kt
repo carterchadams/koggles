@@ -130,6 +130,14 @@ class LibraryRepositoryTest {
         assertEquals(dir.absolutePath, paths[0])
     }
 
+    @Test fun reportError_appearsInErrors() {
+        val r = repo(userTree = { null })
+        await(r, "ready") { it.bundledReady && it.userProbed }
+        r.reportError("Couldn't use that folder: denied")
+        val s = await(r, "error") { "Couldn't use that folder: denied" in it.errors }
+        assertEquals(setOf("bundled:Cream"), s.packIds())
+    }
+
     @Test fun installFailure_bundledTextureDirNull_stillReady() {
         val s = await(repo(install = { throw IOException("disk full") }, userTree = { null }), "ready") { it.bundledReady }
         assertNull(s.bundledTextureDir)

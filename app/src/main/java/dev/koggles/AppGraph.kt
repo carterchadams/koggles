@@ -79,6 +79,9 @@ object AppGraph {
     lateinit var menu: MenuState
         private set
 
+    lateinit var folderPicker: dev.koggles.presets.FolderPicker
+        private set
+
     @Volatile private var playbackOverride: PlaybackControls? = null
 
     /** What the UI drives: [playback], unless a test has overridden it. */
@@ -178,6 +181,13 @@ object AppGraph {
                 renderCommands.setLens(LensState(v.lensOffsetMm, v.distortion))
             }
         }
+        folderPicker = dev.koggles.presets.FolderPicker(
+            scope = appScope,
+            io = Dispatchers.IO,
+            acquire = { uri -> folderGrant.onTreePicked(uri) },
+            onAcquired = { libraryRepo.refresh() },
+            onFailed = { libraryRepo.reportError(it) },
+        )
         menu = MenuState(setPreview = renderCommands::setMenuPreview, dispatch = audio::dispatch)
         appScope.launch {
             audio.snapshot.map { it.state == AudioState.Active }.distinctUntilChanged().collectLatest { active ->
