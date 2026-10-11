@@ -245,4 +245,17 @@ class TextureMirrorTest {
         assertEquals(emptyList<String>(), copied)
         assertTrue(File(dir, "tex.png").isFile)
     }
+
+    @Test
+    fun incompleteScan_withLostManifest_preservesSurvivingFile() {
+        val first = node("a/tex.png")
+        val later = node("z/tex.png", size = 9)
+        val dir = mirror().apply(pack("user:p", first, later))
+        val before = File(dir, "tex.png").readBytes().toList()
+        File(dir, "manifest.json").delete()
+        copied.clear()
+        mirror().apply(pack("user:p", later).copy(readErrors = listOf("a: unreadable")))
+        assertEquals(emptyList<String>(), copied)
+        assertEquals(before, File(dir, "tex.png").readBytes().toList())
+    }
 }

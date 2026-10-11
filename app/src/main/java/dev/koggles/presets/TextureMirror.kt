@@ -43,7 +43,12 @@ class TextureMirror(
 
     fun dirFor(packId: String): File = File(File(cacheRoot, TEXTURES), sha1Hex(packId))
 
-    fun plan(pack: Pack, manifest: MirrorManifest, dirExists: Boolean): MirrorPlan {
+    fun plan(
+        pack: Pack,
+        manifest: MirrorManifest,
+        dirExists: Boolean,
+        fileExists: (String) -> Boolean = { false },
+    ): MirrorPlan {
         val winners = LinkedHashMap<String, DocNode>()
         val collisions = ArrayList<String>()
         for ((relPath, node) in pack.textures.sortedBy { it.first }) {
@@ -55,7 +60,9 @@ class TextureMirror(
             val e = manifest.files[name]
             val source = pack.tree.sourceId(node)
             when {
-                !dirExists || e == null -> true
+                !dirExists -> true
+                // Incomplete scan: a surviving file of unknown provenance may be the real winner — keep it.
+                e == null -> complete || !fileExists(name)
                 // An incomplete scan may be missing the real winner: never swap a cached file's source.
                 e.source != source -> complete
                 else -> e.size != node.size || e.lastModified != node.lastModified
@@ -82,7 +89,7 @@ class TextureMirror(
         if (!dirExists && !dir.mkdirs()) throw IOException("cannot create $dir")
         dir.listFiles()?.forEach { if (it.name.endsWith(TMP)) it.delete() }
 
-        val plan = plan(pack, MirrorManifest(files), dirExists)
+        val plan = plan(pack, MirrorManifest(files), dirExists) { File(dir, it).isFile }
         plan.collisions.forEach { log("texture not mirrored (name collision or unsafe name): ${pack.id}/$it") }
 
         if (plan.delete.isNotEmpty()) {
