@@ -8,6 +8,7 @@ import dev.koggles.presets.AssetDocTree
 import dev.koggles.presets.FolderGrant
 import dev.koggles.presets.LibraryRepository
 import dev.koggles.presets.PresetIndexer
+import dev.koggles.presets.SafDocTree
 import dev.koggles.presets.TextureInstaller
 import dev.koggles.presets.TextureMirror
 import dev.koggles.audio.AudioSnapshot
@@ -78,12 +79,16 @@ object AppGraph {
                 TextureInstaller(AndroidAssetSource(app.assets), app.filesDir, versionKey).installIfNeeded()
             },
             userTree = { folderGrant.currentTree() },
-            mirror = TextureMirror(app.cacheDir, copy = { node, dest ->
-                val tree = folderGrant.currentTree() ?: throw java.io.IOException("folder grant lost")
-                val input = app.contentResolver.openInputStream(tree.uriOf(node))
-                    ?: throw java.io.IOException("cannot open ${node.id}")
-                input.use { src -> dest.outputStream().use { src.copyTo(it) } }
-            }, log = { android.util.Log.w("KogglesLib", it) }),
+            mirror = TextureMirror(
+                app.cacheDir,
+                copy = { node, _ -> throw java.io.IOException("no tree for ${node.id}") },
+                log = { android.util.Log.w("KogglesLib", it) },
+                // Read each node from the tree that indexed it, never from a newer grant.
+                copyFrom = { tree, node, dest ->
+                    val saf = tree as? SafDocTree ?: throw java.io.IOException("unsupported tree for ${node.id}")
+                    saf.openStream(node).use { src -> dest.outputStream().use { src.copyTo(it) } }
+                },
+            ),
             indexer = PresetIndexer(kotlinx.coroutines.Dispatchers.IO),
         )
         // One small blocking read at process start so the audio machine begins with the persisted

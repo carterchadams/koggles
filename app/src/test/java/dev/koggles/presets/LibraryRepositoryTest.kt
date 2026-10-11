@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -141,5 +142,47 @@ class LibraryRepositoryTest {
         gate.countDown()
         val s = await(r, "ready") { it.bundledReady }
         assertEquals(setOf("bundled:Cream"), s.packIds())
+    }
+
+    @Test fun userRootListingThrows_recordsErrorAndStopsIndexing() {
+        val broken = object : DocTree by user {
+            override fun children(node: DocNode): List<DocNode> =
+                if (node.id.isEmpty()) throw IOException("provider unavailable") else user.children(node)
+        }
+        val s = await(repo(userTree = { broken }), "settled") { it.bundledReady && !it.userIndexing && it.errors.isNotEmpty() }
+        assertEquals(setOf("bundled:Cream"), s.packIds())
+        assertTrue(s.errors.any { "provider unavailable" in it })
+    }
+
+    @Test fun mirrorOperations_neverOverlap_acrossRefreshAndLazyRebuild() = runBlocking {
+        val active = java.util.concurrent.atomic.AtomicInteger(0)
+        val maxActive = java.util.concurrent.atomic.AtomicInteger(0)
+        val slowMirror = TextureMirror(tmp.newFolder("slow-cache"), { _, f ->
+            maxActive.accumulateAndGet(active.incrementAndGet()) { a, b -> maxOf(a, b) }
+            Thread.sleep(150)
+            f.writeBytes(byteArrayOf(1))
+            active.decrementAndGet()
+        })
+        val multi = FakeDocTree(listOf("Mine/x.milk", "Mine/a.png", "Mine/b.png", "Mine/c.png"))
+        val r = LibraryRepository(scope, { bundled }, { bundledTex }, { multi }, slowMirror, PresetIndexer(Dispatchers.IO), Dispatchers.IO)
+        await(r, "mirrored") { "user:Mine" in it.packTextureDirs && !it.userIndexing }
+        r.state.value.packTextureDirs.getValue("user:Mine").deleteRecursively()
+        r.refresh()
+        val lazy = kotlinx.coroutines.GlobalScope.async(Dispatchers.IO) { r.texturePathsFor("user:Mine") }
+        lazy.await()
+        await(r, "re-indexed") { !it.userIndexing }
+        Thread.sleep(500)
+        assertEquals("mirror applies must be serialized", 1, maxActive.get())
+    }
+
+    @Test fun copiesUseThePacksOwnTree() {
+        val seen = java.util.Collections.synchronizedList(mutableListOf<DocTree>())
+        val m = TextureMirror(tmp.newFolder("bound-cache"), copy = { _, _ -> error("unbound copy used") }, copyFrom = { tree, _, f ->
+            seen += tree
+            f.writeBytes(byteArrayOf(1))
+        })
+        val r = LibraryRepository(scope, { bundled }, { bundledTex }, { user }, m, PresetIndexer(Dispatchers.IO), Dispatchers.IO)
+        await(r, "mirrored") { "user:Mine" in it.packTextureDirs && !it.userIndexing }
+        assertTrue(seen.isNotEmpty() && seen.all { it === user })
     }
 }

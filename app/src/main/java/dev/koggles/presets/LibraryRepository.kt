@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,9 @@ class LibraryRepository(
     private var bundledErrors: List<String> = emptyList()
     private var userJob: Job? = null
     private val userLock = Mutex()
+
+    /** TextureMirror is not thread-safe: every apply (indexing and lazy rebuilds) runs under this. */
+    private val mirrorLock = Mutex()
     private var userGeneration = 0L
 
     init {
@@ -69,7 +73,11 @@ class LibraryRepository(
         var own = s.packTextureDirs[packId]
         if (own != null && !own.isDirectory) {
             val pack = s.catalog.pack(packId)
-            own = if (pack != null) withContext(io) { runCatching { mirror.apply(pack) }.getOrNull() } else null
+            own = if (pack != null) {
+                withContext(io) { mirrorLock.withLock { runCatching { mirror.apply(pack) }.getOrNull() } }
+            } else {
+                null
+            }
         }
         return listOfNotNull(own, s.bundledTextureDir).filter { it.isDirectory }.map { it.absolutePath }
     }
@@ -99,10 +107,9 @@ class LibraryRepository(
     }
 
     private suspend fun startUserIndex() {
-        val generation = userLock.withLock {
-            userJob?.cancel()
-            ++userGeneration
-        }
+        val (generation, previous) = userLock.withLock { ++userGeneration to userJob }
+        // Wait for the superseded index to stop: its blocking mirror copies must not overlap ours.
+        previous?.cancelAndJoin()
         val tree = userTree()
         if (tree == null) {
             userLock.withLock {
@@ -123,6 +130,7 @@ class LibraryRepository(
         val job = scope.launch(io) {
             val dirs = HashMap<String, File>()
             val errors = ArrayList<String>()
+            try {
             indexer.index(tree, "user").collect { progress ->
                 ensureActive()
                 val packs = when (progress) {
@@ -131,7 +139,7 @@ class LibraryRepository(
                 }
                 for (pack in packs) {
                     if (pack.id in dirs) continue
-                    runCatching { mirror.apply(pack) }
+                    mirrorLock.withLock { runCatching { mirror.apply(pack) } }
                         .onSuccess { dirs[pack.id] = it }
                         .onFailure { errors += "${pack.id} textures: ${it.message}" }
                     errors += pack.readErrors.map { "${pack.id}: $it" }
@@ -147,6 +155,21 @@ class LibraryRepository(
                             packTextureDirs = dirs.toMap(),
                             errors = bundledErrors + errors,
                         )
+                    }
+                }
+            }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // e.g. the provider is unavailable or the grant was revoked: keep bundled presets.
+                userLock.withLock {
+                    if (generation == userGeneration) {
+                        _state.update {
+                            it.copy(
+                                userIndexing = false,
+                                errors = bundledErrors + errors + "user folder: ${e.message}",
+                            )
+                        }
                     }
                 }
             }

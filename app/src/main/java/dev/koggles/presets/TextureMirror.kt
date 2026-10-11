@@ -39,6 +39,8 @@ class TextureMirror(
     private val cacheRoot: File,
     private val copy: (DocNode, File) -> Unit,
     private val log: (String) -> Unit = {},
+    /** Tree-aware copier; preferred over [copy] so each node is read from the tree that indexed it. */
+    private val copyFrom: ((DocTree, DocNode, File) -> Unit)? = null,
 ) {
 
     fun dirFor(packId: String): File = File(File(cacheRoot, TEXTURES), sha1Hex(packId))
@@ -102,7 +104,7 @@ class TextureMirror(
         for ((node, name) in plan.copy) {
             val tmp = File(dir, name + TMP)
             try {
-                copy(node, tmp)
+                copyFrom?.invoke(pack.tree, node, tmp) ?: copy(node, tmp)
                 move(tmp, File(dir, name))
             } catch (e: Exception) { // IOException, or SecurityException from a revoked grant
                 tmp.delete()

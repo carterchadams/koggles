@@ -22,6 +22,13 @@ class SafDocTree(private val resolver: ContentResolver, val treeUri: Uri) : DocT
     /** The full document URI: provider- and tree-qualified (spec §5.2 manifest source). */
     override fun sourceId(node: DocNode): String = uriOf(node).toString()
 
+    /** Opens [node]'s bytes from this tree's provider. */
+    fun openStream(node: DocNode): java.io.InputStream = try {
+        resolver.openInputStream(uriOf(node))
+    } catch (e: RuntimeException) {
+        throw IOException("cannot open ${node.id}", e)
+    } ?: throw IOException("cannot open ${node.id}")
+
     override fun children(node: DocNode): List<DocNode> {
         val uri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, node.id)
         val cursor = try {
