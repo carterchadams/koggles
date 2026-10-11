@@ -10,9 +10,16 @@ import android.provider.DocumentsContract.Document
 data class PersistedGrant(val uri: String, val read: Boolean)
 
 object GrantRules {
-    /** The first readable grant whose [probe] succeeds, else null (no grant, or revoked/deleted). */
-    fun pick(grants: List<PersistedGrant>, probe: (String) -> Boolean): String? =
-        grants.firstOrNull { it.read && probe(it.uri) }?.uri
+    /**
+     * The folder to use: the [active] (last chosen) grant if it is still readable and its [probe]
+     * succeeds, else the first readable grant that probes, else null (no grant, or revoked/deleted).
+     * Preferring [active] means a leftover grant (a release that failed) never shadows the user's
+     * latest choice.
+     */
+    fun pick(grants: List<PersistedGrant>, active: String? = null, probe: (String) -> Boolean): String? {
+        grants.firstOrNull { it.uri == active && it.read }?.let { if (probe(it.uri)) return it.uri }
+        return grants.firstOrNull { it.read && it.uri != active && probe(it.uri) }?.uri
+    }
 
     /**
      * Grant replacement: [take] the new grant first. If that throws, nothing is released and the
@@ -36,10 +43,13 @@ class FolderGrant(context: Context) {
 
     private val resolver = context.applicationContext.contentResolver
 
+    /** The URI the user chose last; survives restarts. */
+    private val prefs = context.applicationContext.getSharedPreferences("folder_grant", Context.MODE_PRIVATE)
+
     /** The granted tree if a readable grant exists and its root document still answers. */
     fun currentTree(): SafDocTree? {
         val grants = resolver.persistedUriPermissions.map { PersistedGrant(it.uri.toString(), it.isReadPermission) }
-        val picked = GrantRules.pick(grants, ::probe) ?: return null
+        val picked = GrantRules.pick(grants, prefs.getString(KEY_ACTIVE, null), ::probe) ?: return null
         return SafDocTree(resolver, Uri.parse(picked))
     }
 
@@ -60,7 +70,10 @@ class FolderGrant(context: Context) {
     fun onTreePicked(uri: String) {
         val picked = Uri.parse(uri)
         GrantRules.replace(
-            take = { resolver.takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION) },
+            take = {
+                resolver.takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                prefs.edit().putString(KEY_ACTIVE, uri).commit()
+            },
             others = resolver.persistedUriPermissions.filter { it.uri != picked },
             release = { p ->
                 var flags = 0
@@ -79,5 +92,9 @@ class FolderGrant(context: Context) {
         } ?: false
     } catch (e: Exception) { // SecurityException on revoke, IllegalArgumentException/FileNotFound on delete
         false
+    }
+
+    private companion object {
+        const val KEY_ACTIVE = "active"
     }
 }

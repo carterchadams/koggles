@@ -27,4 +27,18 @@ class FolderGrantTest {
         val two = grants + PersistedGrant("content://ok", read = true)
         assertEquals("content://ok", GrantRules.pick(two) { it == "content://ok" })
     }
+
+    // R2.2 gate: a grant whose release failed must not shadow the folder the user chose last.
+    @Test
+    fun pickPrefersActiveUri_evenWhenListedSecond() {
+        val grants = listOf(PersistedGrant("content://old", read = true), PersistedGrant("content://new", read = true))
+        assertEquals("content://new", GrantRules.pick(grants, active = "content://new") { true })
+    }
+
+    @Test
+    fun pickActiveUnusable_fallsBackToFirstReadable() {
+        val grants = listOf(PersistedGrant("content://old", read = true), PersistedGrant("content://new", read = true))
+        assertEquals("content://old", GrantRules.pick(grants, active = "content://new") { it != "content://new" })
+        assertEquals("content://old", GrantRules.pick(grants, active = "content://missing") { true })
+    }
 }
