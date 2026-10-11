@@ -18,7 +18,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.content.IntentCompat
-import dev.koggles.NativeBridge
+import dev.koggles.AppGraph
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -62,7 +62,7 @@ class CaptureService : Service() {
                     requireRecording(startRecording = r::startRecording, recordingState = { r.recordingState })
                 },
             )
-            capture = Capture(projection, record) {
+            capture = Capture(projection, record, generation) {
                 CaptureBus.deliver(generation) { onFailed(FailReason.CaptureLost) }
             }.also { it.startReader() }
             CaptureBus.deliver(generation) { onStarted() }
@@ -115,6 +115,7 @@ class CaptureService : Service() {
     private class Capture(
         private val projection: MediaProjection,
         private val record: AudioRecord,
+        private val generation: Long,
         private val onLost: () -> Unit,
     ) {
         private val bytes = ByteBuffer.allocateDirect(FRAMES_PER_READ * 2 * 4).order(ByteOrder.nativeOrder())
@@ -129,7 +130,9 @@ class CaptureService : Service() {
             val loop = CaptureReader(
                 buffer = bytes,
                 read = { b -> record.read(b, b.capacity(), AudioRecord.READ_BLOCKING) },
-                push = { n -> NativeBridge.pushPcmFloat(floats, n / (2 * 4)) },
+                // Through the gate: once the session stops this source, writes are shut out
+                // even while this thread is still winding down.
+                push = { n -> AppGraph.pcmGate.pushFloat(generation, floats, n / (2 * 4)) },
                 isRunning = { running },
                 onUnexpectedError = onLost,
             )

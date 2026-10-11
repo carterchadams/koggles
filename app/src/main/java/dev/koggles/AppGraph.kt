@@ -1,6 +1,8 @@
 package dev.koggles
 
 import dev.koggles.audio.AudioSession
+import dev.koggles.audio.NativePcmSink
+import dev.koggles.audio.PcmGate
 import dev.koggles.audio.PlaybackCaptureSource
 import dev.koggles.audio.Source
 import dev.koggles.audio.UnavailableSource
@@ -20,6 +22,9 @@ object AppGraph {
     lateinit var audio: AudioSession
         private set
 
+    /** Every PCM producer pushes through this gate, tagged with its source generation. */
+    val pcmGate = PcmGate(NativePcmSink)
+
     private val appScope = MainScope()
 
     fun init(app: KogglesApp) {
@@ -28,12 +33,12 @@ object AppGraph {
         audio = AudioSession(
             factory = { source, consent, generation ->
                 when (source) {
-                    Source.Standard -> VisualizerSource()
+                    Source.Standard -> VisualizerSource(onWaveform = { pcmGate.pushU8(generation, it, it.size) })
                     Source.HighQuality ->
                         if (consent != null) PlaybackCaptureSource(app, consent, generation) else UnavailableSource()
                 }
             },
-            flush = { NativeBridge.flushAudio() },
+            gate = pcmGate,
             scope = appScope,
             explainerStore = {}, // in-memory until Task 15 persists it
         )

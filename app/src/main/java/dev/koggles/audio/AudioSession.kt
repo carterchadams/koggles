@@ -14,11 +14,11 @@ import kotlinx.coroutines.launch
  * effects to the activity through [uiEffects]. [dispatch] is called on the main thread.
  *
  * Every source start gets a fresh generation; callbacks from a superseded source are dropped
- * before they reach the reducer (F3).
+ * before they reach the reducer (F3), and its PCM is shut out by [PcmGate] before any flush.
  */
 class AudioSession(
     private val factory: SourceFactory,
-    private val flush: () -> Unit,
+    private val gate: PcmGate,
     private val scope: CoroutineScope,
     private val explainerStore: ExplainerStore,
     initial: AudioSnapshot = AudioSnapshot(),
@@ -51,7 +51,7 @@ class AudioSession(
         when (effect) {
             is AudioEffect.StartSource -> startSource(effect.source)
             AudioEffect.StopSource -> stopSource()
-            AudioEffect.FlushAudio -> flush()
+            AudioEffect.FlushAudio -> gate.flush()
             AudioEffect.MarkExplainerSeen -> scope.launch { explainerStore.markSeen() }
             AudioEffect.ShowExplainer,
             AudioEffect.RequestPermission,
@@ -63,6 +63,7 @@ class AudioSession(
     private fun startSource(source: Source) {
         stopSource()
         val gen = ++generation
+        gate.open(gen)
         val consent = if (source == Source.HighQuality) pendingConsent else null
         val created = factory.create(source, consent, gen)
         current = created
@@ -72,6 +73,7 @@ class AudioSession(
     private fun stopSource() {
         current?.stop()
         current = null
+        gate.close() // synchronous: the stopped source can push no more PCM
         generation++ // every callback from the stopped source is now stale
     }
 

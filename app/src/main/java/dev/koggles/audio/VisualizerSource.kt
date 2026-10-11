@@ -1,7 +1,6 @@
 package dev.koggles.audio
 
 import android.media.audiofx.Visualizer
-import dev.koggles.NativeBridge
 
 /** The subset of [Visualizer] the source uses; every setter returns a Visualizer status code. */
 interface VisualizerApi {
@@ -41,16 +40,17 @@ class AndroidVisualizer : VisualizerApi {
  * after every setup call returns SUCCESS; any exception or error code means the Visualizer is
  * unavailable on this device.
  */
-class VisualizerSource(private val create: () -> VisualizerApi = ::AndroidVisualizer) : AudioSource {
+class VisualizerSource(
+    private val onWaveform: (ByteArray) -> Unit = {},
+    private val create: () -> VisualizerApi = ::AndroidVisualizer,
+) : AudioSource {
     private var visualizer: VisualizerApi? = null
 
     override fun start(listener: AudioSourceListener) {
         val ok = try {
             val v = create().also { visualizer = it }
             v.setCaptureSize(v.maxCaptureSize) == VisualizerApi.SUCCESS &&
-                v.setWaveformListener(v.maxCaptureRate) { waveform ->
-                    NativeBridge.pushPcmU8(waveform, waveform.size)
-                } == VisualizerApi.SUCCESS &&
+                v.setWaveformListener(v.maxCaptureRate, onWaveform) == VisualizerApi.SUCCESS &&
                 v.setEnabled(true) == VisualizerApi.SUCCESS
         } catch (e: RuntimeException) {
             false

@@ -28,9 +28,18 @@ class AudioSessionTest {
     private val created = mutableListOf<FakeSource>()
     private var flushes = 0
     private var marked = 0
+    private val gateLog = mutableListOf<String>()
+    private val gate = object : PcmGate(object : PcmSink {
+        override fun pushFloat(buf: java.nio.FloatBuffer, frames: Int) = Unit
+        override fun pushU8(buf: ByteArray, frames: Int) = Unit
+        override fun flush() { flushes++; gateLog += "flush" }
+    }) {
+        override fun open(generation: Long) { super.open(generation); gateLog += "open:$generation" }
+        override fun close() { super.close(); gateLog += "close" }
+    }
     private val session = AudioSession(
         factory = { source, consent, generation -> FakeSource(source, consent, generation).also { created += it } },
-        flush = { flushes++ },
+        gate = gate,
         scope = scope,
         explainerStore = { marked++ },
     )
@@ -160,5 +169,17 @@ class AudioSessionTest {
         hq.listener!!.onProjectionStopped()
         scope.advanceUntilIdle()
         assertEquals(AudioState.NeedsConsent, session.snapshot.value.state)
+    }
+
+    @Test
+    fun sourceSwitch_closesGateBeforeFlushThenOpensNewGeneration() {
+        startStandardActive()
+        gateLog.clear()
+        session.dispatch(AudioEvent.SelectSource(Source.HighQuality))
+        val id = (session.snapshot.value.state as AudioState.AwaitingConsent).requestId
+        session.provideConsent(id, ConsentData(-1, Intent()))
+        assertEquals("close", gateLog.first())
+        assertTrue(gateLog.indexOf("flush") > gateLog.indexOf("close"))
+        assertEquals("open:${created.last().generation}", gateLog.last())
     }
 }
