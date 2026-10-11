@@ -26,12 +26,12 @@ Java_dev_koggles_NativeBridge_nativeInit(JNIEnv*, jobject) {
     Engine::instance();
 }
 
-// Main thread, from MainActivity.onCreate (D5).
+// Main thread, once per process from KogglesApp.onCreate, with the Application context.
 JNIEXPORT void JNICALL
-Java_dev_koggles_NativeBridge_cardboardInit(JNIEnv* env, jobject, jobject activity) {
+Java_dev_koggles_NativeBridge_cardboardInit(JNIEnv* env, jobject, jobject appContext) {
     JavaVM* vm = nullptr;
-    if (activity == nullptr || env->GetJavaVM(&vm) != JNI_OK) return;
-    koggles::cardboardInitAndroid(vm, activity);
+    if (appContext == nullptr || env->GetJavaVM(&vm) != JNI_OK) return;
+    koggles::cardboardInitAndroid(vm, appContext);
 }
 
 // Reads `frames` stereo frames from the start of the direct buffer (its position is ignored).

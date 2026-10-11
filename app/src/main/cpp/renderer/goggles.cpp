@@ -2,10 +2,15 @@
 
 #include <cardboard.h>
 
+#include <mutex>
+
 namespace koggles {
 
+// Cardboard_initializeAndroid takes a new global reference to `context` on every call and never
+// releases it, so it is called at most once per process, with the Application context.
 void cardboardInitAndroid(JavaVM* vm, jobject context) {
-    Cardboard_initializeAndroid(vm, context);
+    static std::once_flag once;
+    std::call_once(once, [&] { Cardboard_initializeAndroid(vm, context); });
 }
 
 void Goggles::release() {

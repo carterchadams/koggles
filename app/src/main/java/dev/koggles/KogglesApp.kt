@@ -6,6 +6,7 @@ class KogglesApp : Application() {
     override fun onCreate() {
         super.onCreate()
         NativeBridge.nativeInit()
+        NativeBridge.cardboardInit(this)
         AppGraph.init(this)
     }
 }
