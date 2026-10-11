@@ -1,0 +1,6 @@
+[submodule "third_party/projectm"]
+	path = third_party/projectm
+	url = https://github.com/projectM-visualizer/projectm
+[submodule "third_party/cardboard"]
+	path = third_party/cardboard
+	url = https://github.com/googlevr/cardboard
