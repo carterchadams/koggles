@@ -75,11 +75,12 @@ class PlaybackControllerTest {
     private fun TestScope.controller(
         texturePaths: suspend (String) -> List<String> = { listOf("/tex/$it") },
         seed: Int = 1,
+        onUserReadFailure: suspend () -> Unit = {},
     ): PlaybackController {
         // Not backgroundScope: advanceUntilIdle() does not drive background work.
         val scope = CoroutineScope(StandardTestDispatcher(testScheduler) + SupervisorJob())
         scopes += scope
-        return PlaybackController(scope, Playlist(Random(seed)), sink, reader, texturePaths, settings, library, libState)
+        return PlaybackController(scope, Playlist(Random(seed)), sink, reader, texturePaths, settings, library, libState, onUserReadFailure)
     }
 
     private val scopes = mutableListOf<CoroutineScope>()
@@ -185,6 +186,37 @@ class PlaybackControllerTest {
         advanceUntilIdle()
         c.previous(); advanceUntilIdle()
         assertEquals(a, c.nowPlaying.value.ref!!.key)
+    }
+
+    @Test fun userReadFailure_awaitsHookBeforeNextPick() = runTest {
+        val withUser = catalogOf(pack("bundled:p", "p0.milk", "p1.milk"), pack("user:u", "u0.milk"))
+        libState.value = state(ready = true, cat = withUser, grant = true)
+        failing += "user:u/u0.milk"
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") } // start on a bundled preset
+        val hook = CompletableDeferred<Unit>()
+        var hookCalls = 0
+        val c = controller(onUserReadFailure = {
+            hookCalls++
+            hook.await()
+            libState.value = state(ready = true, cat = catalogOf(pack("bundled:p", "p0.milk", "p1.milk")))
+        })
+        c.start(); advanceUntilIdle()
+        val before = sink.loads().size
+        c.select("user:u/u0.milk"); advanceUntilIdle()
+        assertEquals(1, hookCalls)
+        assertEquals("no pick while the library is being revalidated", before, sink.loads().size)
+        hook.complete(Unit); advanceUntilIdle()
+        assertEquals(before + 1, sink.loads().size)
+        assertTrue(loadedKey(sink.loads().last()).startsWith("bundled:"))
+    }
+
+    @Test fun bundledReadFailure_doesNotInvokeHook() = runTest {
+        failing += keys[0]
+        var hookCalls = 0
+        val c = controller(onUserReadFailure = { hookCalls++ })
+        c.start(); advanceUntilIdle()
+        c.select(keys[0]); advanceUntilIdle()
+        assertEquals(0, hookCalls)
     }
 
     @Test fun switchRequested_staleRequestIgnored() = runTest {

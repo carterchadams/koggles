@@ -33,7 +33,7 @@ class LibraryRepositoryTest {
     private val mirror by lazy { TextureMirror(tmp.newFolder("cache"), { _, f -> f.writeBytes(byteArrayOf(1)) }) }
 
     private fun repo(
-        userTree: () -> DocTree? = { user },
+        userTree: suspend () -> DocTree? = { user },
         install: () -> File = { bundledTex },
         bundledTree: () -> DocTree = { bundled },
     ) = LibraryRepository(scope, bundledTree, install, userTree, mirror, PresetIndexer(Dispatchers.IO), Dispatchers.IO)
@@ -128,6 +128,80 @@ class LibraryRepositoryTest {
         assertTrue(dir.isDirectory)
         assertTrue(File(dir, "k.png").isFile)
         assertEquals(dir.absolutePath, paths[0])
+    }
+
+    // ---- R2.3: live grant-loss recovery ----
+
+    @Test fun revalidate_lostGrant_hidesUserPacksKeepsBundled() {
+        var tree: DocTree? = user
+        val r = repo(userTree = { tree })
+        await(r, "user merged") { "user:Mine" in it.packIds() && !it.userIndexing }
+        tree = null
+        runBlocking { r.revalidate() }
+        val s = r.state.value
+        assertEquals(setOf("bundled:Cream"), s.packIds())
+        assertFalse(s.hasGrant)
+        assertTrue(s.packTextureDirs.isEmpty())
+        assertTrue(s.errors.toString(), "Folder access lost" in s.errors)
+    }
+
+    @Test fun revalidate_stillGranted_noReindex() {
+        val r = repo()
+        val before = await(r, "user merged") { "user:Mine" in it.packIds() && !it.userIndexing }
+        val calls = user.childrenCalls
+        runBlocking { r.revalidate() }
+        Thread.sleep(200)
+        assertEquals("no re-index", calls, user.childrenCalls)
+        assertEquals(before, r.state.value)
+    }
+
+    @Test fun revalidate_duringPausedIndex_staleUserPacksNeverReappear() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val slow = object : DocTree by user {
+            override fun children(node: DocNode): List<DocNode> {
+                if (node.id == "Mine") { started.countDown(); release.await(5, TimeUnit.SECONDS) }
+                return user.children(node)
+            }
+        }
+        var tree: DocTree? = slow
+        val r = repo(userTree = { tree })
+        // The index publishes once per pack; hold it inside the only pack, then lose the grant.
+        await(r, "indexing") { it.hasGrant && it.userIndexing }
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        tree = null
+        val revalidation = scope.async { r.revalidate() }
+        release.countDown()
+        runBlocking { withTimeout(10_000) { revalidation.await() } }
+        repeat(5) {
+            val s = r.state.value
+            assertFalse("stale user packs reappeared: ${s.packIds()}", s.packIds().any { id -> id.startsWith("user:") })
+            assertFalse(s.hasGrant)
+            Thread.sleep(100)
+        }
+    }
+
+    @Test fun revalidate_staleNullProbe_afterNewGrantIndexed_keepsNewGrant() {
+        val holdNext = java.util.concurrent.atomic.AtomicBoolean(false)
+        val probing = CountDownLatch(1)
+        val releaseProbe = CountDownLatch(1)
+        var tree: DocTree? = user
+        val r = repo(userTree = {
+            if (holdNext.getAndSet(false)) { probing.countDown(); releaseProbe.await(5, TimeUnit.SECONDS); null } else tree
+        })
+        await(r, "user merged") { "user:Mine" in it.packIds() && !it.userIndexing }
+        holdNext.set(true)
+        val revalidation = scope.async { r.revalidate() }
+        assertTrue(probing.await(5, TimeUnit.SECONDS))
+        // While the old probe is in flight, the user picks a new folder and it is indexed.
+        tree = FakeDocTree(listOf("Other/o.milk"))
+        r.refresh()
+        await(r, "new grant indexed") { "user:Other" in it.packIds() && !it.userIndexing }
+        releaseProbe.countDown()
+        runBlocking { withTimeout(10_000) { revalidation.await() } }
+        val s = r.state.value
+        assertTrue("new grant kept: ${s.packIds()}", "user:Other" in s.packIds())
+        assertTrue(s.hasGrant)
     }
 
     @Test fun reportError_appearsInErrors() {

@@ -41,7 +41,7 @@ class LibraryRepository(
     private val scope: CoroutineScope,
     private val bundledTree: () -> DocTree,
     private val installTextures: () -> File,
-    private val userTree: () -> DocTree?,
+    private val userTree: suspend () -> DocTree?,
     private val mirror: TextureMirror,
     private val indexer: PresetIndexer,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -70,6 +70,39 @@ class LibraryRepository(
     /** Re-indexes the user tree (a new grant, Rescan, or a lost grant); cancels an in-flight index. */
     fun refresh() {
         scope.launch { if (_state.value.bundledReady) startUserIndex() }
+    }
+
+    /**
+     * Spec §7: re-checks a published folder grant without re-indexing. If the folder is gone or
+     * access was revoked, user packs are hidden in one update and bundled playback continues.
+     * Safe against races: the result of a probe that a refresh or new grant has since superseded
+     * is discarded, and the in-flight user index is cancelled under a new generation so it can
+     * never republish the lost packs.
+     */
+    suspend fun revalidate() {
+        val generation = userGeneration
+        if (!_state.value.hasGrant) return
+        if (withContext(io) { userTree() } != null) return
+        val previous = userLock.withLock {
+            if (generation != userGeneration) return
+            ++userGeneration
+            userJob.also { userJob = null }
+        }
+        previous?.cancelAndJoin()
+        userLock.withLock {
+            if (generation + 1 != userGeneration) return
+            publishedGeneration = userGeneration
+            _state.update {
+                it.copy(
+                    catalog = Catalog(bundledPacks),
+                    userIndexing = false,
+                    hasGrant = false,
+                    userProbed = true,
+                    packTextureDirs = emptyMap(),
+                    errors = bundledErrors + FOLDER_LOST,
+                )
+            }
+        }
     }
 
     /** Shows [message] in the Library section until the next index publication. */
@@ -216,5 +249,9 @@ class LibraryRepository(
         var packs: List<Pack> = emptyList()
         indexer.index(tree, prefix).collect { p -> if (p is IndexProgress.Done) packs = p.packs }
         return packs to packs.flatMap { pack -> pack.readErrors.map { "${pack.id}: $it" } }
+    }
+
+    private companion object {
+        const val FOLDER_LOST = "Folder access lost"
     }
 }

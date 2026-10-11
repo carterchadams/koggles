@@ -169,6 +169,7 @@ object AppGraph {
             settings = settings,
             library = library,
             libraryState = libraryRepo.state,
+            onUserReadFailure = { libraryRepo.revalidate() },
         )
         NativeBridge.listener = playback
         // Renderer-side settings: replayed onto each new renderer by RenderCommands.

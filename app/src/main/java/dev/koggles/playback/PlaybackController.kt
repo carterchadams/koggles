@@ -47,6 +47,8 @@ class PlaybackController(
     private val settings: Settings,
     private val library: PresetLibrary,
     private val libraryState: StateFlow<LibraryState>,
+    /** Awaited when a `user:` preset can't be read: re-checks the folder grant (spec §7). */
+    private val onUserReadFailure: suspend () -> Unit = {},
 ) : NativeListener, PlaybackControls {
 
     private val _nowPlaying = MutableStateFlow(NowPlaying())
@@ -181,6 +183,13 @@ class PlaybackController(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        if (target.ref.packId.startsWith("user:")) {
+                            // The folder may be gone (spec §7): let the library re-check it, and
+                            // pick next only once the playlist has the result, so a lost folder
+                            // can't burn through the failure bound.
+                            onUserReadFailure()
+                            applied.first { it === libraryState.value }
+                        }
                         if (fresh()) playlist.onLoadFailed(id)?.let(::process)
                         return@launch
                     }

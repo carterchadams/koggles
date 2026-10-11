@@ -215,6 +215,8 @@ class MainActivity : ComponentActivity() {
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         audio.dispatch(AudioEvent.ActivityStarted(granted))
+        // The folder may have been deleted or revoked while we were away (spec §7).
+        AppGraph.appScope.launch { AppGraph.libraryRepo.revalidate() }
     }
 
     override fun onStop() {
