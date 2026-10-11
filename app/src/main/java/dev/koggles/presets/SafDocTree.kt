@@ -63,7 +63,7 @@ class SafDocTree(private val resolver: ContentResolver, val treeUri: Uri) : DocT
         } catch (e: RuntimeException) {
             throw IOException("cannot open ${node.id}", e)
         } ?: throw IOException("cannot open ${node.id}")
-        return input.use { it.readBytes().toString(Charsets.UTF_8) }
+        return input.use { it.readPresetText() }
     }
 
     private companion object {

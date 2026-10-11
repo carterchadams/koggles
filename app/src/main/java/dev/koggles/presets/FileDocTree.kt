@@ -17,7 +17,7 @@ class FileDocTree(private val rootDir: File) : DocTree {
         return files.filterNot { Files.isSymbolicLink(it.toPath()) }.map(::node)
     }
 
-    override fun readText(node: DocNode): String = File(node.id).readText(Charsets.UTF_8)
+    override fun readText(node: DocNode): String = File(node.id).inputStream().use { it.readPresetText() }
 
     private fun node(f: File): DocNode {
         val isDir = f.isDirectory
