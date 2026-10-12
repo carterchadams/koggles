@@ -31,6 +31,7 @@ class AutoAdvanceTest {
     private val loads = Collections.synchronizedList(mutableListOf<Loaded>()) // issued loads
     private val ackLatencyMs = Collections.synchronizedList(mutableListOf<Long>())
     private val issuedAt = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+    private val ackedAt = java.util.concurrent.ConcurrentHashMap<Long, Long>()
     private var displaced: NativeListener? = null
     private val watcher = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate)
 
@@ -50,7 +51,9 @@ class AutoAdvanceTest {
                 real?.onPresetFailed(requestId, message)
             }
             override fun onPresetLoaded(requestId: Long) {
-                issuedAt[requestId]?.let { ackLatencyMs += SystemClock.elapsedRealtime() - it }
+                val now = SystemClock.elapsedRealtime()
+                ackedAt.putIfAbsent(requestId, now)
+                issuedAt[requestId]?.let { ackLatencyMs += now - it }
                 real?.onPresetLoaded(requestId)
             }
         }
@@ -85,8 +88,9 @@ class AutoAdvanceTest {
                     if (!a.interstitial && b.requestId == a.requestId + 1 && advance == null && seen.first() != a) {
                         advance = b.atMs - a.atMs
                     }
+                    // Visible duration: from the interstitial's on-screen ack to its destination's issue.
                     if (a.interstitial && !b.interstitial && b.requestId == a.requestId + 1) {
-                        interstitial = b.atMs - a.atMs
+                        interstitial = b.atMs - (ackedAt[a.requestId] ?: a.atMs)
                     }
                 }
             }

@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Test
@@ -45,7 +46,20 @@ class BundledPresetsCompileTest {
             if (assets.list(path)!!.isNotEmpty()) presetsUnder(assets, path) else listOf(path).filter { it.endsWith(".milk") }
         }
 
+    /** Load-only coverage, any build: no failed or timed-out loads. Shader fallbacks are invisible here. */
+    @Test fun everyBundledPreset_loads() = sweep(requireOwnShaders = false)
+
+    /**
+     * The shader gate: every bundled preset's own warp and composite shaders compile. projectM
+     * silently substitutes fallback shaders on failure, so this needs the diagnostics build
+     * (-PkogglesShaderDiagnostics); without it the test is skipped rather than passing vacuously.
+     */
     @Test fun everyBundledPreset_loadsWithItsOwnShaders() {
+        assumeTrue("shader gate needs -PkogglesShaderDiagnostics", NativeBridge.diagnosticsEnabled())
+        sweep(requireOwnShaders = true)
+    }
+
+    private fun sweep(requireOwnShaders: Boolean) {
         val assets = AppGraph.app.assets
         val pack = "presets/${BundledPackTest.PACK}"
         val extra = InstrumentationRegistry.getArguments().getString("extraPresets").orEmpty()
@@ -57,7 +71,7 @@ class BundledPresetsCompileTest {
                 val data = assets.open(path).use { String(it.readBytes(), Charsets.UTF_8) } // as readPresetText does
                 val r = probe.load(data)
                 Log.i(TAG, "${r.shaderClass}\tms=${r.ms}\t$path\t${r.firstError}")
-                val ok = r.shaderClass == "compiled" || (!r.diagnosticsOn && r.shaderClass == "loaded-unverified")
+                val ok = if (requireOwnShaders) r.shaderClass == "compiled" else r.outcome == "loaded"
                 if (ok) null else "$path: ${r.shaderClass} ${r.firstError}".trim()
             }
         }

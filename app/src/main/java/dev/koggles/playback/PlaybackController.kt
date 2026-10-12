@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import java.io.IOException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -176,8 +177,10 @@ class PlaybackController(
         lastLoadedId = requestId
         playlist.onLoaded(requestId)
         val issued = lastIssued ?: return
+        if (issued.requestId != requestId) return
+        if (issued.kind == Kind.Interstitial) startInterstitialTimer(requestId)
         val ref = (issued.target as? Target.Preset)?.ref ?: return
-        if (issued.requestId == requestId && issued.kind == Kind.Normal) {
+        if (issued.kind == Kind.Normal) {
             scope.launch { settings.update { it.copy(lastPresetKey = ref.key) } }
         }
     }
@@ -200,7 +203,11 @@ class PlaybackController(
                 Target.Idle -> if (fresh()) sink.loadIdle(id)
                 is Target.Preset -> {
                     val data = try {
-                        reader.read(target.ref)
+                        // A provider that never answers (a stalled cloud folder) would otherwise
+                        // stall playback: the timer events for the old preset are dropped as stale
+                        // while the new one never arrives.
+                        withTimeoutOrNull(LOAD_TIMEOUT_MS) { reader.read(target.ref) }
+                            ?: throw IOException("preset read timed out")
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -215,21 +222,34 @@ class PlaybackController(
                         return@launch
                     }
                     if (!fresh()) return@launch
-                    val paths = texturePaths(target.ref.packId)
+                    val paths = withTimeoutOrNull(LOAD_TIMEOUT_MS) { texturePaths(target.ref.packId) }
+                    if (paths == null) {
+                        if (fresh()) playlist.onLoadFailed(id)?.let(::process)
+                        return@launch
+                    }
                     if (!fresh()) return@launch
                     sink.load(data, id, smooth, paths)
                 }
             }
         }
-        if (r.kind == Kind.Interstitial) {
-            timerJob = scope.launch {
-                delay(values.interstitialSec * 1000L)
-                if (fresh()) playlist.onInterstitialElapsed(id)?.let(::process)
-            }
+    }
+
+    /**
+     * An interstitial's duration is its time on screen, so its timer starts when the renderer
+     * reports it loaded, not when the load was issued: reading, texture setup and shader
+     * compilation can take seconds on a slow phone and would otherwise eat the interstitial.
+     */
+    private fun startInterstitialTimer(id: Long) {
+        timerJob?.cancel()
+        timerJob = scope.launch {
+            delay(values.interstitialSec * 1000L)
+            if (id == playlist.latestRequestId) playlist.onInterstitialElapsed(id)?.let(::process)
         }
     }
 
-    private companion object {
-        const val USER_INDEX_WAIT_MS = 3_000L
+    companion object {
+        private const val USER_INDEX_WAIT_MS = 3_000L
+        /** Reading a preset's text or texture paths longer than this counts as a failed load. */
+        const val LOAD_TIMEOUT_MS = 10_000L
     }
 }

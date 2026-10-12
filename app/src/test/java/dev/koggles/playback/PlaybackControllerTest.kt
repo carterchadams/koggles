@@ -240,8 +240,8 @@ class PlaybackControllerTest {
         c.onPresetLoaded(shown)
         val target = keys.first { it != loadedKey(sink.loads().single()) }
         gates[target] = CompletableDeferred()
-        c.select(target); advanceUntilIdle()
-        c.onSwitchRequested(false, shown); advanceUntilIdle()
+        c.select(target); runCurrent() // the read is in flight (not stalled past the load timeout)
+        c.onSwitchRequested(false, shown); runCurrent()
         gates[target]!!.complete(Unit); advanceUntilIdle()
         assertEquals(2, sink.loads().size)
         assertEquals(target, loadedKey(sink.loads().last()))
@@ -283,10 +283,10 @@ class PlaybackControllerTest {
         c.onPresetLoaded(shown)
         val target = keys.first { it != loadedKey(sink.loads().single()) }
         gates[target] = CompletableDeferred()
-        c.select(target); advanceUntilIdle() // our latest: its read is in flight
+        c.select(target); runCurrent() // our latest: its read is in flight (not stalled past the load timeout)
         val foreign = c.nowPlayingRequestId() + 1_000
         sink.current = foreign // accepted ...
-        c.onPresetFailed(foreign, "foreign preset failed"); advanceUntilIdle() // ... and failed
+        c.onPresetFailed(foreign, "foreign preset failed"); runCurrent() // ... and failed
         gates[target]!!.complete(Unit); advanceUntilIdle()
         c.onSwitchRequested(false, shown); advanceUntilIdle() // the older displayed id: stale
         val last = sink.loads().last()
@@ -323,8 +323,40 @@ class PlaybackControllerTest {
         c.next(); runCurrent()
         assertTrue(loadedKey(sink.loads().last()).contains("!t/"))
         assertTrue(c.nowPlaying.value.interstitial)
+        c.onPresetLoaded(c.nowPlayingRequestId()) // on screen now
         advanceTimeBy(4_100); runCurrent()
         assertFalse(loadedKey(sink.loads().last()).contains("!t/"))
+    }
+
+    /** A preset read that never completes (a stalled cloud provider) must not stall playback. */
+    @Test fun stalledRead_timesOut_andPlaybackMovesOn() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val target = keys.first { it != loadedKey(sink.loads().single()) }
+        gates[target] = CompletableDeferred() // never completed
+        c.select(target); runCurrent()
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        val last = sink.loads().last()
+        assertEquals(2, sink.loads().size)
+        assertTrue("moved on from the stalled preset: $last", loadedKey(last) != target)
+    }
+
+    /** The interstitial's visible duration starts when it is on screen, not when its load was issued. */
+    @Test fun interstitialTimer_startsAtLoadedAck_notAtIssue() = runTest {
+        val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "!t/t0.milk"))
+        libState.value = state(ready = true, cat = mixed)
+        val c = controller(); c.start(); advanceUntilIdle()
+        gates["bundled:a/!t/t0.milk"] = CompletableDeferred()
+        c.next(); runCurrent()
+        assertTrue(c.nowPlaying.value.interstitial)
+        advanceTimeBy(8_000); runCurrent() // slow load: the interstitial is not on screen yet
+        assertTrue("destination issued before the interstitial was shown", c.nowPlaying.value.interstitial)
+        gates["bundled:a/!t/t0.milk"]!!.complete(Unit); runCurrent()
+        val shown = c.nowPlayingRequestId()
+        c.onPresetLoaded(shown)
+        advanceTimeBy(3_900); runCurrent()
+        assertTrue(c.nowPlaying.value.interstitial)
+        advanceTimeBy(200); runCurrent()
+        assertFalse(c.nowPlaying.value.interstitial)
     }
 
     @Test fun navigationCancelsInterstitialTimer() = runTest {
