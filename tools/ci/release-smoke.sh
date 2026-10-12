@@ -4,7 +4,8 @@
 #
 #   tools/ci/release-smoke.sh <apk>          (adb must reach exactly one device)
 #
-# PASS requires, in the app process's log:
+# PASS requires, in the captured log (see smoke-verdict.py), and the same app pid alive after a
+# settle period:
 #   (a) "upcalls ready 3/3";
 #   (b) "KogglesUp loaded N", then "KogglesUp switch N", then "load-begin N+1", then "KogglesUp loaded N+1";
 #   (c) no FATAL EXCEPTION / NoSuchMethodError / ClassNotFoundException / UnsatisfiedLinkError / "upcalls:" error.
@@ -30,35 +31,35 @@ for _ in $(seq 1 50); do
 done
 [ -n "$pid" ] || { echo "FAIL: $pkg did not start"; exit 1; }
 
-verdict() {
-  python3 - "$log" <<'PY'
-import re, sys
-text = open(sys.argv[1], errors="replace").read()
-bad = re.search(r"FATAL EXCEPTION|NoSuchMethodError|ClassNotFoundException|UnsatisfiedLinkError|upcalls: ", text)
-if bad:
-    print("FAIL: " + text[max(0, bad.start() - 200): bad.end() + 400]); sys.exit(1)
-if "upcalls ready 3/3" not in text:
-    sys.exit(2)  # not yet
-events = re.findall(r"(KogglesUp: loaded|KogglesUp: switch|KogglesG1: load-begin) (\d+)", text)
-seq = [(kind.split(": ")[1], int(n)) for kind, n in events]
-for i, (k, n) in enumerate(seq):
-    if k != "loaded":
-        continue
-    want = [("switch", n), ("load-begin", n + 1), ("loaded", n + 1)]
-    rest = iter(seq[i + 1:])
-    if all(any(e == w for e in rest) for w in want):
-        print(f"PASS: upcalls ready 3/3; loaded {n} -> switch {n} -> load-begin {n+1} -> loaded {n+1}")
-        sys.exit(0)
-sys.exit(2)
-PY
+here="$(cd "$(dirname "$0")" && pwd)"
+settle_s="${SMOKE_SETTLE_S:-5}"
+
+# The app's own lines plus crash evidence that other processes log about it (libc fatal signal,
+# tombstone writer, ActivityManager), from the main, system and crash buffers.
+capture() {
+  adb logcat -d -b main,system,crash 2>/dev/null \
+    | awk -v pid="$pid" '$3 == pid || /dev\.koggles/ || / F DEBUG /' > "$log" || true
 }
 
 deadline=$((SECONDS + timeout_s))
 while [ "$SECONDS" -lt "$deadline" ]; do
-  adb logcat -d --pid="$pid" > "$log" 2>/dev/null || true
-  set +e; verdict; rc=$?; set -e
-  [ "$rc" -eq 0 ] && exit 0
+  capture
+  set +e; python3 "$here/smoke-verdict.py" "$log"; rc=$?; set -e
   [ "$rc" -eq 1 ] && exit 1
+  if [ "$rc" -eq 0 ]; then
+    # The sequence alone isn't enough: the app must survive a settle period, same process.
+    sleep "$settle_s"
+    capture
+    set +e; python3 "$here/smoke-verdict.py" "$log" > /dev/null; rc=$?; set -e
+    now="$(adb shell pidof "$pkg" | tr -d '\r' || true)"
+    if [ "$rc" -eq 0 ] && [ "$now" = "$pid" ]; then
+      echo "PASS: alive after ${settle_s}s settle (pid $pid)"
+      exit 0
+    fi
+    echo "FAIL: app did not survive the settle period (pid $pid -> '${now}', verdict rc=$rc)"
+    grep -E "Fatal|DEBUG|died|FATAL|upcalls" "$log" | tail -20 || true
+    exit 1
+  fi
   sleep 2
 done
 echo "FAIL: no upcall-driven auto-advance within ${timeout_s}s"
