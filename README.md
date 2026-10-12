@@ -109,10 +109,10 @@ Android requires every APK to be signed, so a rebuilt APK carries your key, not 
 - **Google Cardboard SDK:** Apache-2.0.
 - **Koggles Starter Pack presets:** a selection from projectM's
   [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), whose
-  repository states no license. MilkDrop presets were generally released by their authors without
-  one; the projectM team treats them as public domain and removes presets on request (`LICENSE.md` in
-  its `presets-cream-of-the-crop` repository). Licensing for public distribution is an open decision
-  (H7 in [`plans/RELEASE-HARDENING.md`](plans/RELEASE-HARDENING.md)).
+  repository states no license, plus Cream of the Crop's 4 transition presets. They are distributed
+  under the projectM team's statement that MilkDrop presets are safe to treat as public domain, and
+  that it removes presets on request (`LICENSE.md` in its `presets-cream-of-the-crop` repository). The
+  app quotes it verbatim in `assets/licenses/koggles-starter-pack-presets.md`.
 - **MilkDrop texture pack:** the textures shipped with MilkDrop plus others used by presets.
 
 All licence texts are in the app under *Library → About & licenses*.
