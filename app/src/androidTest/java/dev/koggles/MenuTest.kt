@@ -132,9 +132,11 @@ class MenuTest {
         compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
         // Leave portrait for the next test.
         runBlocking { AppGraph.settings.update { it.copy(goggles = false) } }
+        // Spec: normal mode follows the device, so a real phone lying in landscape stays there;
+        // wait for the app to release the lock, not for a physical rotation.
         compose.waitUntil(5_000) {
-            compose.activity.resources.configuration.orientation !=
-                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            compose.activity.requestedOrientation ==
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
@@ -164,9 +166,11 @@ class MenuTest {
         assertTitleBarVisibleAfterScroll()
         compose.runOnUiThread { AppGraph.menu.close() }
         runBlocking { AppGraph.settings.update { it.copy(goggles = false) } }
+        // Spec: normal mode follows the device, so a real phone lying in landscape stays there;
+        // wait for the app to release the lock, not for a physical rotation.
         compose.waitUntil(5_000) {
-            compose.activity.resources.configuration.orientation !=
-                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            compose.activity.requestedOrientation ==
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
