@@ -33,7 +33,19 @@ import dev.koggles.audio.ConsentData
 import dev.koggles.audio.Source
 import dev.koggles.render.ViewerQr
 import dev.koggles.render.VisualizerView
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
+import dev.koggles.settings.SettingsValues
 import dev.koggles.ui.AudioErrorScreen
+import dev.koggles.ui.MenuModel
+import dev.koggles.ui.MenuOverlay
+import dev.koggles.ui.consumeAllTouches
+import dev.koggles.ui.isAudioError
+import dev.koggles.ui.menu.MenuActions
+import dev.koggles.ui.visualizerGestures
+import kotlinx.coroutines.flow.first
 import dev.koggles.ui.Explainer
 import dev.koggles.ui.UnsupportedScreen
 import dev.koggles.ui.isGles3Supported
@@ -88,19 +100,37 @@ class MainActivity : ComponentActivity() {
         DebugHooks.install(this)
         setContent {
             val snapshot by audio.snapshot.collectAsStateWithLifecycle()
+            val values by AppGraph.settings.values.collectAsStateWithLifecycle(SettingsValues())
+            val menuOpen by AppGraph.menu.open.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize()) {
                 // The visualization stays attached; audio screens cover it completely.
                 AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
-                when (val state = snapshot.state) {
-                    AudioState.ShowingExplainer -> Explainer { audio.dispatch(AudioEvent.ExplainerAccepted) }
-                    else -> AudioErrorScreen(
-                        state = state,
-                        onRetry = { audio.dispatch(AudioEvent.Retry) },
-                        onSwitchToHighQuality = { audio.dispatch(AudioEvent.SelectSource(Source.HighQuality)) },
-                    )
+                Box(
+                    Modifier.fillMaxSize().testTag("visualizer-gestures").visualizerGestures(
+                        singleTapEnabled = { values.singleTapNext },
+                        onSingleTap = { AppGraph.playbackControls.next() },
+                        onDoubleTap = { AppGraph.menu.toggle() },
+                    ),
+                )
+                if (menuOpen) Menu()
+                val state = snapshot.state
+                if (state == AudioState.ShowingExplainer || state.isAudioError()) {
+                    Box(Modifier.fillMaxSize().consumeAllTouches()) {
+                        if (state == AudioState.ShowingExplainer) {
+                            Explainer { audio.dispatch(AudioEvent.ExplainerAccepted) }
+                        } else {
+                            AudioErrorScreen(
+                                state = state,
+                                onRetry = { audio.dispatch(AudioEvent.Retry) },
+                                onSwitchToHighQuality = { audio.dispatch(AudioEvent.SelectSource(Source.HighQuality)) },
+                                onSwitchToStandard = { audio.dispatch(AudioEvent.SelectSource(Source.Standard)) },
+                            )
+                        }
+                    }
                 }
             }
         }
+        lifecycleScope.launch { promptForFolderOnce() }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 audio.uiEffects.collect(::handleUiEffect)
@@ -109,6 +139,60 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             AppGraph.renderCommands.state.map { it.goggles }.distinctUntilChanged().collect { applyOrientation(it) }
         }
+    }
+
+    /** Spec §4: the one-time "Choose folder" prompt is pending (shown first, highlighted). */
+    private var highlightChooseFolder by mutableStateOf(false)
+
+    private val folderLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val uri = result.data?.data ?: return@registerForActivityResult
+        AppGraph.folderPicker.picked(uri.toString()) // grant IPC off main; failures reach Library
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun Menu() {
+        val now by AppGraph.playbackControls.nowPlaying.collectAsStateWithLifecycle()
+        val values by AppGraph.settings.values.collectAsStateWithLifecycle(SettingsValues())
+        val library by AppGraph.libraryRepo.state.collectAsStateWithLifecycle()
+        val disabled by AppGraph.library.disabledPacks.collectAsStateWithLifecycle(emptySet())
+        val favorites by AppGraph.library.favorites.collectAsStateWithLifecycle(emptySet())
+        val skipped by AppGraph.library.skipped.collectAsStateWithLifecycle(emptySet())
+        val snapshot by audio.snapshot.collectAsStateWithLifecycle()
+        val silence by AppGraph.silenceHint.collectAsStateWithLifecycle()
+        val actions = remember {
+            MenuActions(
+                playback = AppGraph.playbackControls,
+                library = AppGraph.library,
+                settings = AppGraph.settings,
+                // Not the composition's scope: a committed setting must survive closing the menu.
+                scope = AppGraph.appScope,
+                dispatchAudio = audio::dispatch,
+                onChooseFolder = {
+                    highlightChooseFolder = false
+                    folderLauncher.launch(AppGraph.folderGrant.openTreeIntent())
+                },
+                onRescan = { AppGraph.libraryRepo.refresh() },
+                onScanQr = ::scanViewerQr,
+            )
+        }
+        MenuOverlay(
+            MenuModel(now, values, library, disabled, favorites, skipped, snapshot, silence),
+            actions,
+            highlightChooseFolder,
+            onClose = {
+                highlightChooseFolder = false
+                AppGraph.menu.close()
+            },
+        )
+    }
+
+    /** First run without a folder: open the menu once on the Library section (spec §4). */
+    private suspend fun promptForFolderOnce() {
+        val library = AppGraph.libraryRepo.state.first { it.userProbed }
+        if (library.hasGrant || AppGraph.settings.values.first().folderPrompted) return
+        AppGraph.settings.update { it.copy(folderPrompted = true) }
+        highlightChooseFolder = true
+        AppGraph.menu.show()
     }
 
     private fun handleUiEffect(effect: AudioEffect) {
@@ -131,6 +215,8 @@ class MainActivity : ComponentActivity() {
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         audio.dispatch(AudioEvent.ActivityStarted(granted))
+        // The folder may have been deleted or revoked while we were away (spec §7).
+        AppGraph.appScope.launch { AppGraph.libraryRepo.revalidate() }
     }
 
     override fun onStop() {
@@ -144,8 +230,7 @@ class MainActivity : ComponentActivity() {
         if (qrCountBeforeScan >= 0) {
             // Back from the QR scanner: a newly saved profile resets the spacing offset.
             if (ViewerQr.changedCount() != qrCountBeforeScan) {
-                val commands = AppGraph.renderCommands
-                commands.setLens(commands.state.value.lens.copy(offsetMm = 0f))
+                lifecycleScope.launch { AppGraph.settings.update { it.copy(lensOffsetMm = 0f) } }
             }
             qrCountBeforeScan = -1
         }

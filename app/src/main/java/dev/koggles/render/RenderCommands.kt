@@ -18,7 +18,8 @@ interface RendererPort {
 class NativeRendererPort(private val xdpi: Float) : RendererPort {
     override fun setTexturePaths(h: Long, paths: List<String>) =
         NativeBridge.rendererSetTextureSearchPaths(h, paths.toTypedArray())
-    override fun setTransition(h: Long, t: TransitionState) {} // wired in Task 19
+    override fun setTransition(h: Long, t: TransitionState) =
+        NativeBridge.rendererSetTransition(h, t.softCut, t.blendSec, t.presetDurationSec, t.hardCutsOnBeat, t.locked)
     override fun setGoggles(h: Long, on: Boolean) = NativeBridge.rendererSetGoggles(h, on)
     override fun setLens(h: Long, lens: LensState) =
         NativeBridge.rendererSetLens(h, lens.offsetMm, lens.distortion, xdpi)
@@ -33,7 +34,7 @@ class NativeRendererPort(private val xdpi: Float) : RendererPort {
  * of each frame — the only point where its EGL context and surface are guaranteed current.
  * A newly attached renderer gets the whole state replayed and the stale queue discarded.
  */
-class RenderCommands(private val native: RendererPort) {
+class RenderCommands(private val native: RendererPort) : dev.koggles.playback.RenderSink {
 
     private val lock = Any()
     private val _state = MutableStateFlow(RenderState())
@@ -66,7 +67,10 @@ class RenderCommands(private val native: RendererPort) {
         }
     }
 
-    fun loadIdle(requestId: Long) = mutate {
+    override fun load(data: String, requestId: Long, smooth: Boolean, texturePaths: List<String>) =
+        loadPreset(data, requestId, smooth, texturePaths)
+
+    override fun loadIdle(requestId: Long) = mutate {
         if (isSuperseded(it, requestId)) return@mutate null
         it.copy(preset = PresetLoad(requestId, null)) to { h: Long ->
             if (_state.value.preset?.requestId == requestId) {

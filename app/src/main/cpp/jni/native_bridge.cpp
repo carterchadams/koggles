@@ -12,6 +12,7 @@
 #include <cardboard.h>
 
 #include "../renderer/engine.h"
+#include "upcalls.h"
 #include "../renderer/goggles.h"
 #include "../renderer/renderer.h"
 
@@ -26,8 +27,9 @@ std::atomic<int> gRendererDestroyCount{0};
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_dev_koggles_NativeBridge_nativeInit(JNIEnv*, jobject) {
+Java_dev_koggles_NativeBridge_nativeInit(JNIEnv* env, jobject) {
     Engine::instance();
+    koggles::upcalls::init(env);
 }
 
 // Main thread, once per process from KogglesApp.onCreate, with a display context derived from
@@ -149,6 +151,15 @@ Java_dev_koggles_NativeBridge_rendererSetLens(JNIEnv*, jobject, jlong h, jfloat 
 JNIEXPORT jboolean JNICALL
 Java_dev_koggles_NativeBridge_rendererGogglesActive(JNIEnv*, jobject, jlong h) {
     return h != 0 && asRenderer(h)->gogglesActive() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetTransition(JNIEnv*, jobject, jlong h, jboolean softCut, jdouble blendSec,
+                                                    jint presetDurationSec, jboolean hardCuts, jboolean locked) {
+    if (h != 0) {
+        asRenderer(h)->setTransition(softCut == JNI_TRUE, blendSec, presetDurationSec, hardCuts == JNI_TRUE,
+                                     locked == JNI_TRUE);
+    }
 }
 
 JNIEXPORT jdoubleArray JNICALL

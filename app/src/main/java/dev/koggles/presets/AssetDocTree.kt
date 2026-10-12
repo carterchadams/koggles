@@ -38,7 +38,7 @@ class AssetDocTree(private val src: AssetSource, rootPath: String) : DocTree {
         }
 
     override fun readText(node: DocNode): String =
-        src.open(node.id).use { it.readBytes().toString(Charsets.UTF_8) }
+        src.open(node.id).use { it.readPresetText() }
 
     private companion object {
         val KNOWN_FILE_EXT = PRESET_EXT + TEXTURE_EXT + setOf("txt", "md")

@@ -10,6 +10,7 @@ import android.os.PowerManager
 import android.util.Log
 import dev.koggles.AppGraph
 import dev.koggles.NativeBridge
+import dev.koggles.NativeListener
 import dev.koggles.audio.AudioEvent
 import dev.koggles.presets.AndroidAssetSource
 import dev.koggles.presets.TextureInstaller
@@ -30,6 +31,19 @@ class LoadGateActivity : Activity() {
     @Volatile private var active = true
     private lateinit var view: VisualizerView
     private val commands get() = AppGraph.renderCommands
+
+    /**
+     * While started, the gate owns renderer events: projectM's own switch requests are dropped (the
+     * gate alone picks presets, not playback), and a failed load invalidates the run.
+     */
+    private val outcomes = object : NativeListener {
+        override fun onSwitchRequested(hardCut: Boolean, requestId: Long) = Unit
+        override fun onPresetFailed(requestId: Long, message: String) {
+            Log.e(TAG, "invalid gate: preset load failed (request $requestId): $message")
+        }
+        override fun onPresetLoaded(requestId: Long) = Unit
+    }
+    private var displacedListener: NativeListener? = null
 
     /** Request ids must stay above whatever RenderCommands (process-scoped) has accepted. */
     private fun nextRequestId(): Long = (commands.state.value.preset?.requestId ?: 0L) + 1
@@ -146,6 +160,8 @@ class LoadGateActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        displacedListener = NativeBridge.listener
+        NativeBridge.listener = outcomes
         val granted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         AppGraph.audio.dispatch(AudioEvent.ActivityStarted(granted))
     }
@@ -155,6 +171,8 @@ class LoadGateActivity : Activity() {
         active = false
         main.removeCallbacksAndMessages(null)
         AppGraph.audio.dispatch(AudioEvent.ActivityStopped)
+        NativeBridge.listener = displacedListener
+        displacedListener = null
         super.onStop()
         finish()
     }

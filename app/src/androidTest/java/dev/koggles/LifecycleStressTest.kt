@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.PI
 import kotlin.math.sin
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -24,6 +25,27 @@ class LifecycleStressTest {
     private val pushing = AtomicBoolean(false)
     private var pusher: Thread? = null
     private val commands get() = AppGraph.renderCommands
+
+    /**
+     * These tests check that one preset survives lifecycle churn. Real playback (Task 19) would
+     * auto-advance mid-test, so hold it: lock (stops projectM's timed switches) and wait out any
+     * interstitial (its own timer advances it even when locked).
+     */
+    @Before
+    fun holdPlayback() {
+        runBlocking { AppGraph.settings.update { it.copy(locked = true) } }
+        val deadline = System.nanoTime() + 15_000_000_000L
+        while (!commands.state.value.transition.locked || AppGraph.playback.nowPlaying.value.interstitial) {
+            assertTrue("playback held", System.nanoTime() < deadline)
+            Thread.sleep(50)
+        }
+        Thread.sleep(300) // the controller's own settings collector
+    }
+
+    @After
+    fun releasePlayback() {
+        runBlocking { AppGraph.settings.update { it.copy(locked = false) } }
+    }
 
     @Before
     fun startPcm() {
