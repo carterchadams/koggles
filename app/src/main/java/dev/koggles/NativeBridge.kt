@@ -67,9 +67,20 @@ object NativeBridge {
     private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
 
     // Upcalls from the GL thread (upcalls.cpp); re-posted to the main thread.
+    // Each logs once per preset change (tag KogglesUp): the release smoke test reads these to prove
+    // the native → Kotlin upcalls survive R8.
     @JvmStatic fun onSwitchRequested(hardCut: Boolean, requestId: Long) {
+        android.util.Log.i(UP_TAG, "switch $requestId")
         main.post { listener?.onSwitchRequested(hardCut, requestId) }
     }
-    @JvmStatic fun onPresetFailed(requestId: Long, message: String) { main.post { listener?.onPresetFailed(requestId, message) } }
-    @JvmStatic fun onPresetLoaded(requestId: Long) { main.post { listener?.onPresetLoaded(requestId) } }
+    @JvmStatic fun onPresetFailed(requestId: Long, message: String) {
+        android.util.Log.i(UP_TAG, "failed $requestId")
+        main.post { listener?.onPresetFailed(requestId, message) }
+    }
+    @JvmStatic fun onPresetLoaded(requestId: Long) {
+        android.util.Log.i(UP_TAG, "loaded $requestId")
+        main.post { listener?.onPresetLoaded(requestId) }
+    }
+
+    private const val UP_TAG = "KogglesUp"
 }
