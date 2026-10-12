@@ -16,9 +16,15 @@ bad() { echo "FAIL $1 $2: $3"; failures=$((failures + 1)); }
 here="$(cd "$(dirname "$0")" && pwd)"
 signer_out="$(mktemp)"; trap 'rm -f "$signer_out"' EXIT
 "$bt/apksigner" verify --verbose --print-certs "$apk" > "$signer_out" 2>&1; signer_rc=$?
-parsed="$("$here/parse-signer.sh" "$signer_out" "$signer_rc" "$want_cert")"
-echo "$parsed"
-failures=$((failures + $(grep -c '^FAIL' <<<"$parsed")))
+# Fail closed: checks 1-2 count as passed only with the parser's explicit PASS lines and exit 0.
+parsed="$("$here/parse-signer.sh" "$signer_out" "$signer_rc" "$want_cert" 2>&1)"; parse_rc=$?
+echo "$parsed" | grep -E '^(PASS|FAIL) [12] ' || true
+for check in "1 signature" "2 cert-pin"; do
+  if [ "$parse_rc" -ne 0 ] || ! grep -qx "PASS $check" <<<"$parsed"; then
+    grep -q "^FAIL $check" <<<"$parsed" || echo "FAIL $check: signer parser failed (rc=$parse_rc)"
+    failures=$((failures + 1))
+  fi
+done
 
 badging="$("$bt/aapt2" dump badging "$apk" 2>/dev/null)"
 # 3 version

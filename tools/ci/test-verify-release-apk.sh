@@ -27,6 +27,10 @@ if [ "${1:-}" != "--fixtures" ]; then
   out="$("$v" "$apk" "$map" "$name" "$code" "$cert")"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$(grep -c '^PASS' <<<"$out")" -eq 8 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL positive (rc=$rc):"; echo "$out"; fi
   expect wrong-cert    "FAIL 2 cert-pin"     "$v" "$apk" "$map" "$name" "$code" deadbeef
+  # Fail closed: a missing or broken signer parser must fail the gate, not skip checks 1-2.
+  mkdir -p "$tmp/noparser"; cp "$v" "$tmp/noparser/"
+  out_np="$("$tmp/noparser/verify-release-apk.sh" "$apk" "$map" "$name" "$code" "$cert" 2>&1)"; rc_np=$?
+  if [ "$rc_np" -ne 0 ] && grep -q "FAIL 1 signature" <<<"$out_np"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL parser-missing: rc=$rc_np"; echo "$out_np" | sed 's/^/    /'; fi
   expect wrong-version "FAIL 3 version"      "$v" "$apk" "$map" "$name" 999 "$cert"
   # Literal comparison: regex metacharacters in the expected name must not match (gate finding).
   expect regex-name    "FAIL 3 version"      "$v" "$apk" "$map" "${name%.*}.." "$code" "$cert"
