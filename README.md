@@ -94,7 +94,11 @@ Android requires every APK to be signed, so a rebuilt APK carries your key, not 
   [`AGENTS.md`](AGENTS.md).
 - [`docs/superpowers/specs/2026-10-11-koggles-design.md`](docs/superpowers/specs/2026-10-11-koggles-design.md):
   the design spec.
-- [`docs/verification/`](docs/verification/): gate records G1–G4 and the manual checklist.
+- [`docs/verification/`](docs/verification/): gate records G1–G4 and the manual checklist, plus the execution ledgers
+  and RED/GREEN test evidence.
+- [`docs/diagnosis/`](docs/diagnosis/): field report 1 diagnosis plan, diagnosis, probes and evidence.
+- [`docs/process/README.md`](docs/process/README.md): how the agentic workflow ran, with links to
+  the records.
 - [`docs/codex-review/`](docs/codex-review/) and [`docs/claude-response/`](docs/claude-response/):
   the review history.
 
