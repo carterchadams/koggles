@@ -152,6 +152,10 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += "-DANDROID_STL=c++_shared"
+                // Test builds only: capture projectM preset/shader diagnostics (see jni/diagnostics.h).
+                if (providers.gradleProperty("kogglesShaderDiagnostics").isPresent) {
+                    arguments += "-DKOGGLES_SHADER_DIAGNOSTICS=ON"
+                }
             }
         }
     }
