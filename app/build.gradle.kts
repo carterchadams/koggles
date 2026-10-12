@@ -172,6 +172,15 @@ val syncBundledContent by tasks.registering(Sync::class) {
 
 tasks.named("preBuild") { dependsOn(syncBundledContent) }
 
+// androidTest asset: the allowlist BundledPackTest checks the APK's pack against. Mutation runs pass
+// a deliberately wrong copy with -PkogglesTestAllowlist=<file>; the shipped pack is unaffected.
+val androidTestAllowlist by tasks.registering(Sync::class) {
+    from(providers.gradleProperty("kogglesTestAllowlist").map { layout.projectDirectory.file(it) }
+        .orElse(layout.projectDirectory.file("bundled-presets.txt"))) { rename { "bundled-presets.txt" } }
+    into(layout.buildDirectory.dir("generated/androidTestAllowlist"))
+}
+tasks.named("preBuild") { dependsOn(androidTestAllowlist) }
+
 android {
     namespace = "dev.koggles"
     compileSdk = 36
@@ -270,6 +279,9 @@ android {
     sourceSets {
         getByName("main") {
             assets.srcDir("build/generated/bundled") // = bundledAssetsDir
+        }
+        getByName("androidTest") {
+            assets.srcDir("build/generated/androidTestAllowlist") // = androidTestAllowlist
         }
     }
 
