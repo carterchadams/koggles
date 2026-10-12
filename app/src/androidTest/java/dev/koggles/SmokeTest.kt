@@ -69,13 +69,19 @@ class SmokeTest {
         val firstError = java.util.concurrent.atomic.AtomicInteger(0)
         val done = java.util.concurrent.CountDownLatch(1)
         scenario.onActivity { activity ->
+            var baselineHandle = 0L // GL thread only
             checkNotNull(activity.visualizerView).onFrameDrawn = { error ->
-                if (error != 0) firstError.compareAndSet(0, error)
                 // GL thread: the native counter only advances for frames projectM rendered (not when
                 // the renderer has no projectM instance), and reading it here does not race.
                 val h = commands.attachedHandle
-                val rendered = if (h != 0L) NativeBridge.rendererFrameStats(h)[2].toInt() else 0
-                if (drawn.addAndGet(rendered) >= frames) done.countDown()
+                if (h != 0L && h != baselineHandle) {
+                    // First callback for this renderer: discard what it drew before we watched.
+                    NativeBridge.rendererFrameStats(h)
+                    baselineHandle = h
+                } else if (h != 0L) {
+                    if (error != 0) firstError.compareAndSet(0, error)
+                    if (drawn.addAndGet(NativeBridge.rendererFrameStats(h)[2].toInt()) >= frames) done.countDown()
+                }
             }
         }
         try {
