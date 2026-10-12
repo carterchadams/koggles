@@ -97,4 +97,33 @@ class AutoAdvanceTest {
             assertTrue("interstitial ${inter} ms, expected 4 s ± 1 s", inter in 3_000..5_000)
         }
     }
+
+    /**
+     * The auto-advance setting is a fixed interval (spec §4). projectM randomises each preset's
+     * duration around the setting unless told not to (its "easter egg" sigma, default 1 s), which
+     * gave 27.45 s for "30 s" in one R3 run. Four consecutive advances at 15 s must each land within
+     * ±0.5 s; with the default sigma that happens ~2 % of the time.
+     */
+    @Test fun advanceInterval_isFixed_notRandomised() {
+        runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 15, interstitials = false) } }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                val deadline = SystemClock.elapsedRealtime() + 110_000
+                var intervals = emptyList<Long>()
+                while (SystemClock.elapsedRealtime() < deadline && intervals.size < 4) {
+                    Thread.sleep(250)
+                    val seen = synchronized(loads) { loads.toList() }
+                    // Skip the first load: its preset may have started under the previous settings.
+                    intervals = seen.drop(1).zipWithNext()
+                        .filter { (a, b) -> b.requestId == a.requestId + 1 }
+                        .map { (a, b) -> b.atMs - a.atMs }
+                }
+                android.util.Log.i("AutoAdvanceTest", "fixed-interval samples=$intervals")
+                assertTrue("need 4 advances, got $intervals", intervals.size >= 4)
+                for (ms in intervals.take(4)) assertTrue("advance $ms ms, expected 15 s ± 0.5 s ($intervals)", ms in 14_500..15_500)
+            }
+        } finally {
+            runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 30, interstitials = true) } }
+        }
+    }
 }

@@ -34,6 +34,9 @@ Renderer::Renderer() : pcm_(2 * projectm_pcm_get_max_samples()) {
         projectm_set_preset_switch_failed_event_callback(pm_, &Renderer::onSwitchFailed, this);
         projectm_set_preset_switch_requested_event_callback(pm_, &Renderer::onSwitchRequested, this);
         projectm_set_preset_locked(pm_, true);  // until transition settings arrive
+        // The auto-advance setting is a fixed interval (spec §4). projectM otherwise draws each
+        // preset's duration from a gaussian around it (sigma = "easter egg", default 1 s).
+        projectm_set_easter_egg(pm_, 0.0f);
     }
 }
 
