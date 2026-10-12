@@ -90,7 +90,8 @@ be true before you tag (`plans/RELEASE-HARDENING.md` R8, Blueprint Task 21 Step 
 - every gate record in `docs/verification/` says PASS: G1–G4, including G2's physical-phone
   matrix, G3's headset fit and G4's on-phone performance;
 - every row in `docs/verification/manual-checklist.md` says PASS, including the release-build
-  walk-through on a physical phone;
+  walk-through on a physical phone. Rows under "After publishing" are the exception: you check
+  them once the release exists;
 - every row in `docs/claude-response/2026-10-11-koggles-rulings-for-human.md` is resolved
   (remediation R4);
 - the release-plan decisions H6 (protections) and H7 (licensing for public distribution) are
