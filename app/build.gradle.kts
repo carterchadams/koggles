@@ -255,6 +255,9 @@ android {
             providers.gradleProperty("kogglesAppIdSuffix").orNull?.let { applicationIdSuffix = it }
         }
         release {
+            // Device experiments only: a suffixed, still-minified release installs next to the real app
+            // (release smoke on a phone with Koggles installed): -PkogglesAppIdSuffix=.smoke
+            providers.gradleProperty("kogglesAppIdSuffix").orNull?.let { applicationIdSuffix = it }
             signingConfig = releaseSigning
             isMinifyEnabled = true
             isShrinkResources = true

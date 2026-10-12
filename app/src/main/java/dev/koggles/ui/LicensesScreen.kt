@@ -37,7 +37,7 @@ fun LicensesScreen(onClose: () -> Unit) {
             Text("About & licenses", style = MaterialTheme.typography.titleLarge)
             Text(
                 "Koggles is built on projectM (LGPL 2.1) and the Cardboard SDK (Apache 2.0), and bundles " +
-                    "the Cream of the Crop presets and the Milkdrop texture pack.",
+                    "a selection of projectM's classic presets and the Milkdrop texture pack.",
                 style = MaterialTheme.typography.bodySmall,
             )
             LazyColumn(Modifier.testTag("licenses-list"), contentPadding = PaddingValues(vertical = 8.dp)) {

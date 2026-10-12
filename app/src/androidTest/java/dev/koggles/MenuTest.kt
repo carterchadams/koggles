@@ -229,6 +229,17 @@ class MenuTest {
         compose.onAllNodesWithText("cardboard", substring = true, ignoreCase = true).onFirst().assertExists()
     }
 
+    /** DP-copy (plans/PRESET-PACK-CLASSIC.md), approved by the human: exact text. */
+    @Test fun licensesScreen_describesBundledContentExactly() {
+        openMenu()
+        scrollTo(hasText("About & licenses"))
+        compose.onNodeWithText("About & licenses").performClick()
+        compose.onNodeWithText(
+            "Koggles is built on projectM (LGPL 2.1) and the Cardboard SDK (Apache 2.0), and bundles " +
+                "a selection of projectM's classic presets and the Milkdrop texture pack.",
+        ).assertIsDisplayed()
+    }
+
     private fun firstBundledRef(): PresetRef = runBlocking {
         withTimeout(20_000) { AppGraph.libraryRepo.state.first { it.bundledReady } }
             .catalog.packs.first { it.id.startsWith("bundled:") }

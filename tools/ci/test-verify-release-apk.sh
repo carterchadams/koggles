@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests tools/ci/verify-release-apk.sh: the signed release passes 8/8, and each check fails on a
-# real input built to break exactly it (plans/RELEASE-HARDENING.md, Task R3).
+# real input built to break exactly it (plans/RELEASE-HARDENING.md, Task R3; content per
+# plans/PRESET-PACK-CLASSIC.md).
 #   test-verify-release-apk.sh <signed-release.apk> <mapping.txt> <versionName> <versionCode> <cert> <debug.apk> <no-keep-rules.apk>
 # Static-only mode (CI without device artifacts): test-verify-release-apk.sh --fixtures
 set -uo pipefail
@@ -41,6 +42,33 @@ if [ "${1:-}" != "--fixtures" ]; then
   expect no-keep-rules "FAIL 6 jni-upcalls"  "$v" "$norules" "$map" "$name" "$code" "$cert"
   expect debuggable    "FAIL 7 not-debuggable" "$v" "$debug" "$map" "$name" "$code" "$cert"
   expect too-big       "FAIL 8 size"         env MAX_APK_MB=1 "$v" "$apk" "$map" "$name" "$code" "$cert"
+  # Content is exactly the hash-pinned allowlist (plans/PRESET-PACK-CLASSIC.md, PP4). Each mutation is
+  # re-signed with a throwaway key whose cert is passed in, so only check 5 can fail.
+  bt="${BUILD_TOOLS:-${ANDROID_HOME:-/missing-android-home}/build-tools/36.0.0}"
+  rs_pw='koggles-verifier-test'
+  keytool -genkeypair -keystore "$tmp/rs.jks" -storetype PKCS12 -alias rs -keyalg RSA -keysize 2048 -validity 2 \
+    -storepass "$rs_pw" -keypass "$rs_pw" -dname "CN=Koggles verifier test (throwaway)" > /dev/null 2>&1
+  rs_cert="$(keytool -list -v -keystore "$tmp/rs.jks" -storepass "$rs_pw" -alias rs | awk '/SHA256:/{print $2}')"
+  resign() { "$bt/zipalign" -f -p 4 "$1" "$2.aligned" && "$bt/apksigner" sign --ks "$tmp/rs.jks" --ks-pass "pass:$rs_pw" \
+    --key-pass "pass:$rs_pw" --out "$2" "$2.aligned" && rm -f "$2.aligned"; }
+  only5() { # name apk: exactly one FAIL line, and it is check 5
+    local out; out="$("$v" "$2" "$map" "$name" "$code" "$rs_cert" 2>&1)"
+    if [ "$(grep -c '^FAIL' <<<"$out")" -eq 1 ] && grep -q '^FAIL 5 content' <<<"$out"; then pass=$((pass+1))
+    else fail=$((fail+1)); echo "FAIL $1: expected only check 5 to fail:"; echo "$out" | sed 's/^/    /'; fi
+  }
+  pk='assets/presets/Koggles Starter Pack'
+  victim="$(unzip -Z1 "$apk" | grep -m1 -E "^$pk/[A-Za-z0-9 ._-]+\.milk$")"  # no zip wildcard characters
+  resign "$apk" "$tmp/rs-base.apk"
+  out_rs="$("$v" "$tmp/rs-base.apk" "$map" "$name" "$code" "$rs_cert" 2>&1)"
+  if [ "$(grep -c '^PASS' <<<"$out_rs")" -eq 8 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL resigned-baseline:"; echo "$out_rs" | sed 's/^/    /'; fi
+  cp "$apk" "$tmp/m-missing.apk"; zip -qd "$tmp/m-missing.apk" "$victim"
+  resign "$tmp/m-missing.apk" "$tmp/m-missing.s.apk"; only5 content-missing "$tmp/m-missing.s.apk"
+  mkdir -p "$tmp/x/$pk"; printf 'MILKDROP_PRESET_VERSION=201\n' > "$tmp/x/$pk/Koggles - Extra.milk"
+  cp "$apk" "$tmp/m-extra.apk"; (cd "$tmp/x" && zip -q "$tmp/m-extra.apk" "$pk/Koggles - Extra.milk")
+  resign "$tmp/m-extra.apk" "$tmp/m-extra.s.apk"; only5 content-extra "$tmp/m-extra.s.apk"
+  mkdir -p "$tmp/c"; (cd "$tmp/c" && unzip -q "$apk" "$victim" && printf '\n// changed\n' >> "$victim")
+  cp "$apk" "$tmp/m-changed.apk"; zip -qd "$tmp/m-changed.apk" "$victim"; (cd "$tmp/c" && zip -q "$tmp/m-changed.apk" "$victim")
+  resign "$tmp/m-changed.apk" "$tmp/m-changed.s.apk"; only5 content-changed "$tmp/m-changed.s.apk"
 fi
 echo "verify-release-apk: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
