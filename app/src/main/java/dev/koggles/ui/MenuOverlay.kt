@@ -3,6 +3,7 @@ package dev.koggles.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,7 @@ import dev.koggles.playback.NowPlaying
 import dev.koggles.presets.LibraryState
 import dev.koggles.settings.SettingsValues
 import dev.koggles.ui.menu.MenuActions
+import dev.koggles.ui.menu.MenuTitleBar
 import dev.koggles.ui.menu.TreeExpansion
 import dev.koggles.ui.menu.audioSection
 import dev.koggles.ui.menu.displaySection
@@ -51,7 +53,7 @@ data class MenuModel(
 
 /**
  * Spec §4 menu: a flat panel over a dimmed single preview. Touches never reach the visualization;
- * Back closes it (D1: double tap no longer does).
+ * the title bar's X or Back closes it (D1: double tap no longer does).
  */
 @Composable
 fun MenuOverlay(model: MenuModel, actions: MenuActions, highlightChooseFolder: Boolean, onClose: () -> Unit) {
@@ -69,19 +71,28 @@ fun MenuOverlay(model: MenuModel, actions: MenuActions, highlightChooseFolder: B
             shape = MaterialTheme.shapes.large,
             tonalElevation = 4.dp,
         ) {
-            MenuList(model, actions, highlightChooseFolder) { licensesOpen = true }
+            Column {
+                MenuTitleBar(onClose)
+                MenuList(model, actions, highlightChooseFolder, Modifier.weight(1f)) { licensesOpen = true }
+            }
         }
         if (licensesOpen) LicensesScreen(onClose = { licensesOpen = false })
     }
 }
 
 @Composable
-private fun MenuList(model: MenuModel, actions: MenuActions, highlightChooseFolder: Boolean, onOpenLicenses: () -> Unit) {
+private fun MenuList(
+    model: MenuModel,
+    actions: MenuActions,
+    highlightChooseFolder: Boolean,
+    modifier: Modifier,
+    onOpenLicenses: () -> Unit,
+) {
     val expanded = remember { TreeExpansion() }
     val current = model.now.ref
     LazyColumn(
         state = rememberLazyListState(),
-        modifier = Modifier.fillMaxSize().testTag("menu-list"),
+        modifier = modifier.fillMaxWidth().testTag("menu-list"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
     ) {
         // First run: the Library section leads, so "Choose folder" is the first thing seen.

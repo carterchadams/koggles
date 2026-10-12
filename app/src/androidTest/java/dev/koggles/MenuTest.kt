@@ -138,6 +138,38 @@ class MenuTest {
         }
     }
 
+    @Test fun closeButton_closesMenu() {
+        openMenu()
+        compose.onNodeWithContentDescription("Close settings").performClick()
+        compose.waitUntil(3_000) { !AppGraph.menu.open.value }
+        menu.assertDoesNotExist()
+    }
+
+    private fun assertTitleBarVisibleAfterScroll() {
+        openMenu()
+        scrollTo(hasText(HQ_CAVEAT, substring = true))
+        compose.onNodeWithText("Koggles Settings").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close settings").assertIsDisplayed()
+    }
+
+    @Test fun titleBar_staysVisibleWhenScrolled() = assertTitleBarVisibleAfterScroll()
+
+    @Test fun titleBar_staysVisibleWhenScrolled_landscape() {
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
+        compose.waitUntil(5_000) {
+            compose.activity.resources.configuration.orientation ==
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        }
+        compose.waitForIdle()
+        assertTitleBarVisibleAfterScroll()
+        compose.runOnUiThread { AppGraph.menu.close() }
+        runBlocking { AppGraph.settings.update { it.copy(goggles = false) } }
+        compose.waitUntil(5_000) {
+            compose.activity.resources.configuration.orientation !=
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        }
+    }
+
     /** D1: double tap no longer closes the menu, and the scrim passes nothing to the visualization. */
     @Test fun scrimDoubleTap_doesNotClose() {
         openMenu()
@@ -159,7 +191,7 @@ class MenuTest {
 
     @Test fun hqRow_showsExactCaveat() {
         openMenu()
-        val caveat = "Higher fidelity; some apps block it and it asks again after locking"
+        val caveat = HQ_CAVEAT
         scrollTo(hasText(caveat, substring = true))
         compose.onNodeWithText(caveat, substring = true).assertIsDisplayed()
     }
@@ -201,6 +233,7 @@ class MenuTest {
 
     companion object {
         private val fake = FakePlayback()
+        private const val HQ_CAVEAT = "Higher fidelity; some apps block it and it asks again after locking"
 
         @BeforeClass @JvmStatic fun setUpClass() {
             val pkg = InstrumentationRegistry.getInstrumentation().targetContext.packageName
