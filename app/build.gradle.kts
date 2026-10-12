@@ -1,3 +1,4 @@
+import java.util.Properties
 import java.io.File
 import java.io.OutputStream
 import javax.inject.Inject
@@ -162,8 +163,25 @@ android {
         }
     }
 
+    // Release signing (Blueprint Task 21): keystore.properties at the repo root, never committed.
+    // Without it the release APK is left unsigned (CI's release workflow refuses to run that way).
+    val keystoreProps = rootProject.file("keystore.properties")
+    val releaseSigning = if (keystoreProps.isFile) {
+        val props = Properties().apply { keystoreProps.inputStream().use { load(it) } }
+        signingConfigs.create("release") {
+            storeFile = rootProject.file(props.getProperty("storeFile"))
+            storePassword = props.getProperty("storePassword")
+            keyAlias = props.getProperty("keyAlias")
+            keyPassword = props.getProperty("keyPassword")
+        }
+    } else {
+        logger.warn("keystore.properties not found: release APK is unsigned")
+        null
+    }
+
     buildTypes {
         release {
+            signingConfig = releaseSigning
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
