@@ -45,6 +45,10 @@ object NativeBridge {
     /** Sets projectM's texture search paths; textures are reset only when the list changed. */
     external fun rendererSetTextureSearchPaths(h: Long, paths: Array<String>)
     external fun rendererLastGlError(h: Long): Int
+    /** Frames whose goggles eye copy raised a GL error (cumulative per renderer; any thread). */
+    external fun rendererEyeCopyErrors(h: Long): Int
+    /** GL thread only: one pixel of the current read framebuffer, packed `0xRRGGBBAA`. */
+    external fun glReadPixelRgba(x: Int, y: Int): Int
     external fun rendererSetTransition(
         h: Long, softCut: Boolean, blendSec: Double, presetDurationSec: Int, hardCuts: Boolean, locked: Boolean,
     )

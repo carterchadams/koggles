@@ -5,7 +5,7 @@ package dev.koggles.audio
 
 enum class Source { Standard, HighQuality }
 
-enum class FailReason { VisualizerUnavailable, CaptureStartFailed, ConsentDeclined, CaptureLost }
+enum class FailReason { VisualizerUnavailable, VisualizerBusy, CaptureStartFailed, ConsentDeclined, CaptureLost }
 
 sealed interface AudioState {
     data object Idle : AudioState
@@ -46,6 +46,8 @@ sealed interface AudioEffect {
     data object StopSource : AudioEffect
     data object FlushAudio : AudioEffect
     data object MarkExplainerSeen : AudioEffect
+    /** Dispatch [AudioEvent.Retry] after [delayMs] (busy Visualizer, or its one constructor retry). */
+    data class ScheduleRetry(val delayMs: Long) : AudioEffect
 }
 
 data class AudioSnapshot(
@@ -58,9 +60,16 @@ data class AudioSnapshot(
     val nextRequestId: Long = 1,
     /** The latest prompt deferred because the activity is stopped or the menu is open. */
     val pendingPrompt: AudioEffect? = null,
+    /** The Visualizer's one constructor retry has been used (reset on start and source change). */
+    val visualizerRetried: Boolean = false,
 )
 
 private typealias Step = Pair<AudioSnapshot, List<AudioEffect>>
+
+private val BUSY = AudioState.Failed(FailReason.VisualizerBusy)
+private val UNAVAILABLE = AudioState.Failed(FailReason.VisualizerUnavailable)
+const val BUSY_RETRY_MS = 2_000L
+const val CONSTRUCTOR_RETRY_MS = 1_000L
 
 private val STOP_AND_FLUSH = listOf(AudioEffect.StopSource, AudioEffect.FlushAudio)
 
@@ -74,6 +83,8 @@ fun reduce(s: AudioSnapshot, e: AudioEvent): Pair<AudioSnapshot, List<AudioEffec
                 st == AudioState.Idle || st == AudioState.NeedsConsent -> begin(f)
                 st == AudioState.Active && hq && !e.hasPermission -> STOP_AND_FLUSH then begin(f)
                 st is AudioState.PermissionDenied && st.permanent && e.hasPermission -> begin(f)
+                // Field report 1, P4: a new foreground retries a busy or unavailable Visualizer.
+                st == BUSY || st == UNAVAILABLE -> begin(f.copy(visualizerRetried = false))
                 else -> releasePending(f)
             }
         }
@@ -119,10 +130,21 @@ fun reduce(s: AudioSnapshot, e: AudioEvent): Pair<AudioSnapshot, List<AudioEffec
             }
 
         AudioEvent.SourceStarted ->
-            if (st == AudioState.Starting) s.enter(AudioState.Active) to emptyList() else unchanged(s)
+            if (st == AudioState.Starting) {
+                s.copy(visualizerRetried = false).enter(AudioState.Active) to emptyList()
+            } else {
+                unchanged(s)
+            }
 
         is AudioEvent.SourceFailed ->
             when (st) {
+                // Another client holds the Visualizer: say so and keep retrying while visible.
+                AudioState.Starting if e.reason == FailReason.VisualizerBusy ->
+                    s.enter(BUSY) to listOf(AudioEffect.StopSource, AudioEffect.ScheduleRetry(BUSY_RETRY_MS))
+                // One delayed constructor retry before calling the Visualizer unavailable.
+                AudioState.Starting if e.reason == FailReason.VisualizerUnavailable && !s.visualizerRetried ->
+                    s.copy(visualizerRetried = true) to
+                        listOf(AudioEffect.StopSource, AudioEffect.ScheduleRetry(CONSTRUCTOR_RETRY_MS))
                 AudioState.Starting -> s.enter(AudioState.Failed(e.reason)) to listOf(AudioEffect.StopSource)
                 // A running source died (e.g. AudioRecord read error): surface it, don't stay Active.
                 AudioState.Active -> s.enter(AudioState.Failed(e.reason)) to
@@ -151,6 +173,9 @@ fun reduce(s: AudioSnapshot, e: AudioEvent): Pair<AudioSnapshot, List<AudioEffec
             if (st == AudioState.StoppedByUser || st is AudioState.Failed) begin(s) else unchanged(s)
 
         AudioEvent.Retry -> when {
+            // Scheduled retries (ScheduleRetry) never restart audio in the background.
+            st == BUSY -> if (s.activityStarted) begin(s) else unchanged(s)
+            st == AudioState.Starting -> if (s.activityStarted && s.visualizerRetried) begin(s) else unchanged(s)
             st == AudioState.StoppedByUser || st is AudioState.Failed -> begin(s)
             st is AudioState.PermissionDenied && st.permanent ->
                 s to listOf(AudioEffect.OpenAppSettings)
@@ -163,7 +188,7 @@ fun reduce(s: AudioSnapshot, e: AudioEvent): Pair<AudioSnapshot, List<AudioEffec
             if (e.source == s.source) {
                 unchanged(s)
             } else {
-                val f = s.copy(source = e.source)
+                val f = s.copy(source = e.source, visualizerRetried = false)
                 STOP_AND_FLUSH then
                     (if (f.activityStarted) begin(f) else (f.enter(AudioState.Idle) to emptyList()))
             }

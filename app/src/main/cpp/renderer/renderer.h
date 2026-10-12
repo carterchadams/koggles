@@ -30,6 +30,8 @@ public:
     // Sets projectM's texture search paths; reloads textures only when the list changed.
     void setTextureSearchPaths(const std::vector<std::string>& paths);
     int lastGlError() const { return lastGlError_; }
+    // Frames whose eye copy (glCopyTexSubImage2D) raised a GL error; cumulative, any thread.
+    int eyeCopyErrors() const { return eyeCopyErrors_.load(); }
 
     void setTransition(bool softCut, double blendSec, int presetDurationSec, bool hardCuts, bool locked);
     void setGoggles(bool on);
@@ -61,6 +63,7 @@ private:
     Goggles goggles2d_;
     std::vector<float> pcm_;  // 2 * projectm_pcm_get_max_samples() interleaved floats
     int lastGlError_ = 0;
+    std::atomic<int> eyeCopyErrors_{0};
     std::vector<std::string> texturePaths_;
     bool texturePathsSet_ = false;
 };

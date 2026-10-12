@@ -1,5 +1,6 @@
 package dev.koggles
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -131,10 +132,58 @@ class MenuTest {
         compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
         // Leave portrait for the next test.
         runBlocking { AppGraph.settings.update { it.copy(goggles = false) } }
+        // Spec: normal mode follows the device, so a real phone lying in landscape stays there;
+        // wait for the app to release the lock, not for a physical rotation.
         compose.waitUntil(5_000) {
-            compose.activity.resources.configuration.orientation !=
+            compose.activity.requestedOrientation ==
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    @Test fun closeButton_closesMenu() {
+        openMenu()
+        compose.onNodeWithContentDescription("Close settings").performClick()
+        compose.waitUntil(3_000) { !AppGraph.menu.open.value }
+        menu.assertDoesNotExist()
+    }
+
+    private fun assertTitleBarVisibleAfterScroll() {
+        openMenu()
+        scrollTo(hasText(HQ_CAVEAT, substring = true))
+        compose.onNodeWithText("Koggles Settings").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close settings").assertIsDisplayed()
+    }
+
+    @Test fun titleBar_staysVisibleWhenScrolled() = assertTitleBarVisibleAfterScroll()
+
+    @Test fun titleBar_staysVisibleWhenScrolled_landscape() {
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
+        compose.waitUntil(5_000) {
+            compose.activity.resources.configuration.orientation ==
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
         }
+        compose.waitForIdle()
+        assertTitleBarVisibleAfterScroll()
+        compose.runOnUiThread { AppGraph.menu.close() }
+        runBlocking { AppGraph.settings.update { it.copy(goggles = false) } }
+        // Spec: normal mode follows the device, so a real phone lying in landscape stays there;
+        // wait for the app to release the lock, not for a physical rotation.
+        compose.waitUntil(5_000) {
+            compose.activity.requestedOrientation ==
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    /** D1: double tap no longer closes the menu, and the scrim passes nothing to the visualization. */
+    @Test fun scrimDoubleTap_doesNotClose() {
+        openMenu()
+        menu.performTouchInput { doubleClick(Offset(4f, centerY)) }
+        Thread.sleep(800)
+        assertTrue(AppGraph.menu.open.value)
+        menu.performTouchInput { click(Offset(4f, centerY)) }
+        Thread.sleep(800)
+        assertEquals(0, fake.nexts.get())
+        assertTrue(AppGraph.menu.open.value)
     }
 
     @Test fun back_closesMenu() {
@@ -146,7 +195,7 @@ class MenuTest {
 
     @Test fun hqRow_showsExactCaveat() {
         openMenu()
-        val caveat = "Higher fidelity; some apps block it and it asks again after locking"
+        val caveat = HQ_CAVEAT
         scrollTo(hasText(caveat, substring = true))
         compose.onNodeWithText(caveat, substring = true).assertIsDisplayed()
     }
@@ -188,6 +237,7 @@ class MenuTest {
 
     companion object {
         private val fake = FakePlayback()
+        private const val HQ_CAVEAT = "Higher fidelity; some apps block it and it asks again after locking"
 
         @BeforeClass @JvmStatic fun setUpClass() {
             val pkg = InstrumentationRegistry.getInstrumentation().targetContext.packageName

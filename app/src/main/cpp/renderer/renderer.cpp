@@ -84,6 +84,7 @@ void Renderer::drawFrame() {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, width_, height_);
         projectm_opengl_render_frame(pm_);
+        lastGlError_ = static_cast<int>(glGetError());
     } else {
         // projectM renders one eye (half width) into framebuffer 0; it is copied into the eye
         // texture and drawn to both eyes (G1 P1: projectM ignores a bound FBO).
@@ -93,10 +94,15 @@ void Renderer::drawFrame() {
         eye_.begin(eyeW, eyeH);
         projectm_opengl_render_frame(pm_);
         const GLuint eyeTexture = eye_.end();
+        // Read the copy's error now: Cardboard's draw calls glGetError internally and would
+        // clear it (field report 1, P3).
+        const GLenum copyError = glGetError();
+        if (copyError != GL_NO_ERROR) eyeCopyErrors_.fetch_add(1);
         goggles2d_.configure(width_, height_, xdpi_, lensOffsetMm_, lensDistortion_);
         goggles2d_.draw(eyeTexture);
+        const GLenum drawError = glGetError();
+        lastGlError_ = static_cast<int>(copyError != GL_NO_ERROR ? copyError : drawError);
     }
-    lastGlError_ = static_cast<int>(glGetError());
     if (pendingId_ >= 0) {
         // No failure was reported for the pending load and a frame has rendered: it loaded.
         const int64_t id = pendingId_;
