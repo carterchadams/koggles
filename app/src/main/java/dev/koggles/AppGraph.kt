@@ -167,7 +167,7 @@ object AppGraph {
         }
         playback = PlaybackController(
             scope = appScope,
-            playlist = Playlist(Random.Default),
+            playlist = Playlist(Random.Default, idFloor = { renderCommands.currentRequestId }),
             sink = renderCommands,
             reader = { ref ->
                 withContext(Dispatchers.IO) {

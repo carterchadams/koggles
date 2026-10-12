@@ -50,6 +50,8 @@ class RenderCommands(private val native: RendererPort) : dev.koggles.playback.Re
     @Volatile
     private var owner: Thread? = null
 
+    override val currentRequestId: Long get() = _state.value.preset?.requestId ?: 0L
+
     /** Request id most recently applied to the native renderer (0 if none). */
     @Volatile
     var lastAppliedRequestId: Long = 0L
