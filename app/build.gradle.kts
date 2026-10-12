@@ -192,6 +192,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Optional side-by-side install for device experiments (e.g. the preset sweep), so a
+            // debug build never has to replace an installed release build: -PkogglesAppIdSuffix=.sweep
+            providers.gradleProperty("kogglesAppIdSuffix").orNull?.let { applicationIdSuffix = it }
+        }
         release {
             signingConfig = releaseSigning
             isMinifyEnabled = true
