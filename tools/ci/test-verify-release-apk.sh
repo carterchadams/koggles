@@ -13,10 +13,14 @@ expect() { # name expected-substring command...
   if grep -qF "$want" <<<"$out"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $name: wanted '$want' in:"; echo "$out" | sed 's/^/    /'; fi
 }
 fx="$here/fixtures"
-expect parse-signed   "PASS 1 signature" env SIGNER_OUTPUT_FILE="$fx/apksigner-36.0.0-signed.txt" "$v" x x x x f4994d43451a2e2ff5c684bea3b464e60cd2574406203b75c3253e8939ccfd1a
-expect parse-pin      "PASS 2 cert-pin"  env SIGNER_OUTPUT_FILE="$fx/apksigner-36.0.0-signed.txt" "$v" x x x x F4:99:4D:43:45:1A:2E:2F:F5:C6:84:BE:A3:B4:64:E6:0C:D2:57:44:06:20:3B:75:C3:25:3E:89:39:CC:FD:1A
-expect parse-unsigned "FAIL 1 signature" env SIGNER_OUTPUT_FILE="$fx/apksigner-36.0.0-unsigned.txt" "$v" x x x x 00
-expect parse-wrongpin "FAIL 2 cert-pin"  env SIGNER_OUTPUT_FILE="$fx/apksigner-36.0.0-signed.txt" "$v" x x x x deadbeef
+p="$here/parse-signer.sh"
+expect parse-signed   "PASS 1 signature" "$p" "$fx/apksigner-36.0.0-signed.txt" 0 f4994d43451a2e2ff5c684bea3b464e60cd2574406203b75c3253e8939ccfd1a
+expect parse-pin      "PASS 2 cert-pin"  "$p" "$fx/apksigner-36.0.0-signed.txt" 0 F4:99:4D:43:45:1A:2E:2F:F5:C6:84:BE:A3:B4:64:E6:0C:D2:57:44:06:20:3B:75:C3:25:3E:89:39:CC:FD:1A
+expect parse-unsigned "FAIL 1 signature" "$p" "$fx/apksigner-36.0.0-unsigned.txt" 1 00
+expect parse-wrongpin "FAIL 2 cert-pin"  "$p" "$fx/apksigner-36.0.0-signed.txt" 0 deadbeef
+expect parse-rc-nonzero "FAIL 1 signature" "$p" "$fx/apksigner-36.0.0-signed.txt" 1 f4994d43451a2e2ff5c684bea3b464e60cd2574406203b75c3253e8939ccfd1a
+# The production verifier has no test bypass: it fails on a missing APK even if the old hook is set.
+expect no-bypass      "FAIL 1 signature" env SIGNER_OUTPUT_FILE="$fx/apksigner-36.0.0-signed.txt" "$here/verify-release-apk.sh" /nonexistent.apk /nonexistent.txt 0.1.0 1 f4994d43451a2e2ff5c684bea3b464e60cd2574406203b75c3253e8939ccfd1a
 if [ "${1:-}" != "--fixtures" ]; then
   apk="$1"; map="$2"; name="$3"; code="$4"; cert="$5"; debug="$6"; norules="$7"
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
@@ -24,6 +28,8 @@ if [ "${1:-}" != "--fixtures" ]; then
   if [ "$rc" -eq 0 ] && [ "$(grep -c '^PASS' <<<"$out")" -eq 8 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL positive (rc=$rc):"; echo "$out"; fi
   expect wrong-cert    "FAIL 2 cert-pin"     "$v" "$apk" "$map" "$name" "$code" deadbeef
   expect wrong-version "FAIL 3 version"      "$v" "$apk" "$map" "$name" 999 "$cert"
+  # Literal comparison: regex metacharacters in the expected name must not match (gate finding).
+  expect regex-name    "FAIL 3 version"      "$v" "$apk" "$map" "${name%.*}.." "$code" "$cert"
   cp "$apk" "$tmp/nolib.apk"; zip -qd "$tmp/nolib.apk" 'lib/arm64-v8a/libprojectM-4.so'
   expect no-lib        "FAIL 4 native-libs"  "$v" "$tmp/nolib.apk" "$map" "$name" "$code" "$cert"
   cp "$apk" "$tmp/nopresets.apk"; zip -qd "$tmp/nopresets.apk" 'assets/presets/*'
