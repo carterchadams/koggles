@@ -1,0 +1,71 @@
+# Build and test on every push and pull request (plans/RELEASE-HARDENING.md, Task R6).
+# No secrets; the instrumented suite stays a local gate (it needs a stable emulator).
+name: ci
+
+on:
+  push:
+    branches: [main, dev, 'phase*/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK packages (app and Cardboard sub-build)
+        run: >-
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "ndk;29.0.14206865" "cmake;3.22.1" "platforms;android-36" "platforms;android-35" "build-tools;36.0.0"
+          > /dev/null
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Cache bundled content
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/build/content
+          key: bundled-content-${{ hashFiles('gradle/libs.versions.toml') }}
+
+      - name: Lint workflows
+        run: tools/ci/actionlint.sh
+
+      - name: Release-script tests (static)
+        run: |
+          tools/ci/test-version-from-tag.sh
+          tools/ci/test-verify-release-apk.sh --fixtures
+          tools/ci/test-smoke-verdict.sh
+
+      - name: Unit tests and debug build
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Host tests
+        run: |
+          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
+          cmake -S native-tests -B build/host-tests -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/host-tests -j
+          ctest --test-dir build/host-tests --output-on-failure
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          path: app/build/reports/
+          retention-days: 7

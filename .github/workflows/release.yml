@@ -1,0 +1,285 @@
+# Signed release on a vX.Y.Z tag (plans/RELEASE-HARDENING.md, Task R5).
+#   sign    — the only job with signing secrets (Environment "release": reviewer + v*/main refs)
+#   verify  — no secrets: host tests, static APK checks, emulator smoke, source archive
+#   publish — the only write token; tag pushes only (a dispatch is a dry run and never publishes)
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version for the dry run (X.Y.Z); the build is uploaded as a workflow artifact only
+        type: string
+        default: '0.0.1'
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      name: ${{ steps.version.outputs.name }}
+      code: ${{ steps.version.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Start resource sampler
+        run: tools/ci/resource-sampler.sh start resources-sign.txt
+
+      - name: Version from tag
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then tag="$GITHUB_REF_NAME"; else tag="v$INPUT_VERSION"; fi
+          read -r name code < <(tools/ci/version-from-tag.sh "$tag")
+          { echo "tag=$tag"; echo "name=$name"; echo "code=$code"; } >> "$GITHUB_OUTPUT"
+
+      - name: Release tags must be on main
+        if: github.event_name == 'push'
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "release tags must be on main"; exit 1; }
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK packages (app and Cardboard sub-build)
+        run: >-
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "ndk;29.0.14206865" "cmake;3.22.1" "platforms;android-36" "platforms;android-35" "build-tools;36.0.0"
+          > /dev/null
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Cache bundled content
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app/build/content
+          key: bundled-content-${{ hashFiles('gradle/libs.versions.toml') }}
+
+      - name: Signing secrets present
+        env:
+          KS_B64: ${{ secrets.KOGGLES_KEYSTORE_B64 }}
+          STORE_PW: ${{ secrets.KOGGLES_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KOGGLES_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.KOGGLES_KEY_PASSWORD }}
+        run: |
+          for v in KS_B64 STORE_PW KEY_ALIAS KEY_PW; do
+            [ -n "${!v}" ] || { echo "signing secrets missing: refusing to build an unsigned release"; exit 1; }
+          done
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+
+      - name: Build signed release
+        env:
+          KS_B64: ${{ secrets.KOGGLES_KEYSTORE_B64 }}
+          STORE_PW: ${{ secrets.KOGGLES_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KOGGLES_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.KOGGLES_KEY_PASSWORD }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          ks="$RUNNER_TEMP/koggles.jks"
+          trap 'rm -f "$ks" keystore.properties' EXIT
+          base64 -d <<<"$KS_B64" > "$ks"
+          esc() { printf '%s' "${1//\\/\\\\}"; }   # java.util.Properties treats backslashes as escapes
+          {
+            printf 'storeFile=%s\n' "$ks"
+            printf 'storePassword=%s\n' "$(esc "$STORE_PW")"
+            printf 'keyAlias=%s\n' "$(esc "$KEY_ALIAS")"
+            printf 'keyPassword=%s\n' "$(esc "$KEY_PW")"
+          } > keystore.properties
+          ./gradlew --no-daemon :app:assembleRelease \
+            -PkogglesVersionName="$VERSION_NAME" -PkogglesVersionCode="$VERSION_CODE"
+
+      - name: Upload signed build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signed
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Stop resource sampler
+        if: always()
+        run: tools/ci/resource-sampler.sh stop resources-sign.txt
+
+      - name: Upload resource samples
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: resources-sign
+          path: resources-sign.txt
+          retention-days: 7
+
+  verify:
+    needs: sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.sign.outputs.tag }}
+      VERSION_NAME: ${{ needs.sign.outputs.name }}
+      VERSION_CODE: ${{ needs.sign.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Start resource sampler
+        run: tools/ci/resource-sampler.sh start resources-verify.txt
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK packages
+        run: >-
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" "build-tools;36.0.0" > /dev/null
+
+      - name: Host tests
+        run: |
+          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
+          cmake -S native-tests -B build/host-tests -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/host-tests -j
+          ctest --test-dir build/host-tests --output-on-failure
+
+      - name: Download signed build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signed
+          path: signed
+
+      - name: Static verification
+        env:
+          CERT: ${{ vars.KOGGLES_CERT_SHA256 }}
+        run: |
+          [ -n "$CERT" ] || { echo "repository variable KOGGLES_CERT_SHA256 is not set"; exit 1; }
+          apk="$(find signed -name app-release.apk)"; map="$(find signed -name mapping.txt)"
+          tools/ci/verify-release-apk.sh "$apk" "$map" "$VERSION_NAME" "$VERSION_CODE" "$CERT"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Release smoke on an emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb shell getprop ro.product.cpu.abilist | tee abilist.txt
+            grep -q arm64-v8a abilist.txt
+            tools/ci/release-smoke.sh "$(find signed -name app-release.apk)"
+
+      - name: Assemble release files
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          base="koggles-$TAG"
+          cp "$(find signed -name app-release.apk)" "dist/$base.apk"
+          cp "$(find signed -name mapping.txt)" "dist/$base-mapping.txt"
+          ref="$GITHUB_SHA"
+          tools/ci/source-archive.sh "$ref" "dist/$base-source.tar.gz"
+          (cd dist && sha256sum "$base.apk" > "$base.apk.sha256")
+
+      - name: Upload release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: koggles-${{ needs.sign.outputs.tag }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Stop resource sampler
+        if: always()
+        run: tools/ci/resource-sampler.sh stop resources-verify.txt
+
+      - name: Upload resource samples
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: resources-verify
+          path: resources-verify.txt
+          retention-days: 7
+
+  publish:
+    needs: [sign, verify]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.sign.outputs.tag }}
+      VERSION_NAME: ${{ needs.sign.outputs.name }}
+      VERSION_CODE: ${{ needs.sign.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: koggles-${{ needs.sign.outputs.tag }}
+          path: dist
+
+      - name: Version must be above every published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          max="$(tools/ci/published-max-version.sh)"
+          [ "$VERSION_CODE" -gt "$max" ] || { echo "versionCode $VERSION_CODE is not above published $max"; exit 1; }
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          {
+            git for-each-ref "refs/tags/$TAG" --format='%(contents)'
+            echo
+            echo "versionCode: $VERSION_CODE"
+            echo
+            echo 'SHA-256:'
+            (cd dist && sha256sum ./*)
+          } > notes.md
+          pre=()
+          [ "${VERSION_NAME%%.*}" = 0 ] && pre=(--prerelease)
+          gh release create "$TAG" dist/* --verify-tag --title "Koggles $TAG" --notes-file notes.md "${pre[@]}"

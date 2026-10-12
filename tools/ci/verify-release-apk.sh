@@ -6,8 +6,12 @@
 # $ANDROID_HOME/build-tools/36.0.0). Signer parsing lives in parse-signer.sh (tested with fixtures).
 set -uo pipefail
 apk="${1:?apk}"; mapping="${2:?mapping}"; want_name="${3:?versionName}"; want_code="${4:?versionCode}"; want_cert="${5:?certSha256}"
-bt="${BUILD_TOOLS:-$ANDROID_HOME/build-tools/36.0.0}"
-apkanalyzer="${APKANALYZER:-$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer}"
+bt="${BUILD_TOOLS:-${ANDROID_HOME:-/missing-android-home}/build-tools/36.0.0}"
+apkanalyzer="${APKANALYZER:-${ANDROID_HOME:-/missing-android-home}/cmdline-tools/latest/bin/apkanalyzer}"
+if [ ! -x "$bt/apksigner" ] || [ ! -x "$bt/aapt2" ] || [ ! -x "$apkanalyzer" ]; then
+  echo "FAIL 1 signature: build tools not found (apksigner/aapt2 in $bt, apkanalyzer) — set ANDROID_HOME"
+  exit 1
+fi
 failures=0
 ok()  { echo "PASS $*"; }
 bad() { echo "FAIL $1 $2: $3"; failures=$((failures + 1)); }
