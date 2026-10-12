@@ -238,17 +238,14 @@ class PlaybackController(
      * Runs [block] in its own job and waits at most [LOAD_TIMEOUT_MS] for its result, else null. A
      * provider that never answers (a stalled cloud folder) would otherwise stall playback: timer
      * events for the preset still on screen are dropped as stale while the new one never arrives.
-     * Cancellation can't interrupt a blocking content-provider read, so the work is detached rather
-     * than cancelled: a late result is simply dropped. Exceptions from [block] propagate.
+     * The wait is abandoned, never the work: cancellation can't interrupt a blocking
+     * content-provider read, and cancelling a folder revalidation mid-way would leave the library
+     * half updated. A late result is dropped, since only the current load job talks to the sink.
+     * Exceptions from [block] propagate while the wait is still on.
      */
     private suspend fun <T> bounded(block: suspend () -> T): T? {
         val job = scope.async(SupervisorJob(scope.coroutineContext[Job])) { block() }
-        return try {
-            withTimeoutOrNull(LOAD_TIMEOUT_MS) { job.await() } ?: run { job.cancel(); null }
-        } catch (e: CancellationException) {
-            job.cancel()
-            throw e
-        }
+        return withTimeoutOrNull(LOAD_TIMEOUT_MS) { job.await() }
     }
 
     /**

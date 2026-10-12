@@ -15,6 +15,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -375,6 +376,38 @@ class PlaybackControllerTest {
         advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
         assertEquals(before + 1, sink.loads().size)
         assertTrue(loadedKey(sink.loads().last()).startsWith("bundled:"))
+    }
+
+    /**
+     * Abandoning the wait must not cancel the work: a revalidation cancelled mid-way (it has a
+     * suspension point between changing its generation and publishing) leaves the library half
+     * updated. The hook must run to completion after playback has moved on.
+     */
+    @Test fun stalledRevalidation_isAbandonedNotCancelled() = runTest {
+        val withUser = catalogOf(pack("bundled:p", "p0.milk", "p1.milk"), pack("user:u", "u0.milk"))
+        libState.value = state(ready = true, cat = withUser, grant = true)
+        failing += "user:u/u0.milk"
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") }
+        var completed = false
+        var cancelled = false
+        val c = controller(onUserReadFailure = {
+            try {
+                withContext(Dispatchers.IO) { blockRelease.await() }
+                completed = true
+            } catch (e: CancellationException) {
+                cancelled = true
+                throw e
+            }
+        })
+        c.start(); advanceUntilIdle()
+        c.select("user:u/u0.milk"); runCurrent()
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        assertTrue("playback moved on", loadedKey(sink.loads().last()).startsWith("bundled:"))
+        blockRelease.countDown()
+        // The blocked IO thread wakes in real time; give it a moment to resume onto the test scheduler.
+        repeat(100) { if (completed || cancelled) return@repeat; Thread.sleep(20); advanceUntilIdle() }
+        assertFalse("the revalidation was cancelled mid-way", cancelled)
+        assertTrue("the revalidation ran to completion", completed)
     }
 
     /** The interstitial's visible duration starts when it is on screen, not when its load was issued. */
