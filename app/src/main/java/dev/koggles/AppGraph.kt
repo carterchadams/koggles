@@ -146,7 +146,10 @@ object AppGraph {
         audio = AudioSession(
             factory = { source, consent, generation ->
                 audioSourceOverride?.create(source, consent, generation) ?: when (source) {
-                    Source.Standard -> VisualizerSource(onWaveform = { pcmGate.pushU8(generation, it, it.size) })
+                    Source.Standard -> VisualizerSource(
+                        onWaveform = { pcmGate.pushU8(generation, it, it.size) },
+                        log = { android.util.Log.w("KogglesAudio", it) },
+                    )
                     Source.HighQuality ->
                         if (consent != null) PlaybackCaptureSource(app, consent, generation) else UnavailableSource()
                 }

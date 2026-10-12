@@ -5,7 +5,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -181,5 +183,88 @@ class AudioSessionTest {
         assertEquals("close", gateLog.first())
         assertTrue(gateLog.indexOf("flush") > gateLog.indexOf("close"))
         assertEquals("open:${created.last().generation}", gateLog.last())
+    }
+
+    // ---- Field report 1, P4: busy and constructor retries run on the session's scope. ----
+
+    /** A source whose start outcome comes from [outcomes] (null = started); records live sources. */
+    private inner class Scripted(val outcomes: ArrayDeque<FailReason?>) {
+        var creates = 0
+        var running = 0
+        val session = AudioSession(
+            factory = { source, _, _ ->
+                creates++
+                object : AudioSource {
+                    var live = false
+                    override fun start(listener: AudioSourceListener) {
+                        val outcome = if (source == Source.Standard) outcomes.removeFirstOrNull() else null
+                        if (outcome == null) { live = true; running++; listener.onStarted() } else listener.onFailed(outcome)
+                    }
+                    override fun stop() { if (live) { live = false; running-- } }
+                }
+            },
+            gate = gate,
+            scope = scope,
+            explainerStore = { },
+        )
+        val state get() = session.snapshot.value.state
+    }
+
+    @Test
+    fun busyThenFree_recoversToActive_withoutUserAction() {
+        val t = Scripted(ArrayDeque(listOf(FailReason.VisualizerBusy, FailReason.VisualizerBusy)))
+        t.session.dispatch(AudioEvent.ActivityStarted(hasPermission = true))
+        scope.runCurrent()
+        assertEquals(AudioState.Failed(FailReason.VisualizerBusy), t.state)
+        scope.advanceTimeBy(4100)
+        scope.runCurrent()
+        assertEquals(AudioState.Active, t.state)
+        assertEquals(3, t.creates)
+        assertEquals(1, t.running)
+    }
+
+    @Test
+    fun busy_stop_releaseWhileStopped_start_reachesActive() {
+        val t = Scripted(ArrayDeque(listOf(FailReason.VisualizerBusy)))
+        t.session.dispatch(AudioEvent.ActivityStarted(hasPermission = true))
+        scope.runCurrent()
+        assertEquals(AudioState.Failed(FailReason.VisualizerBusy), t.state)
+        t.session.dispatch(AudioEvent.ActivityStopped)
+        scope.advanceTimeBy(5000)
+        scope.runCurrent()
+        assertEquals("no restart in the background", 1, t.creates)
+        assertEquals(AudioState.Failed(FailReason.VisualizerBusy), t.state)
+        t.session.dispatch(AudioEvent.ActivityStarted(hasPermission = true))
+        scope.runCurrent()
+        assertEquals(AudioState.Active, t.state)
+    }
+
+    @Test
+    fun constructorRetry_stopDuringDelay_noRestartNoLeak() {
+        val t = Scripted(ArrayDeque(listOf(FailReason.VisualizerUnavailable)))
+        t.session.dispatch(AudioEvent.ActivityStarted(hasPermission = true))
+        scope.runCurrent()
+        assertEquals(AudioState.Starting, t.state)
+        scope.advanceTimeBy(500)
+        t.session.dispatch(AudioEvent.ActivityStopped)
+        scope.advanceTimeBy(2000)
+        scope.runCurrent()
+        assertEquals(1, t.creates)
+        assertEquals(0, t.running)
+    }
+
+    @Test
+    fun constructorRetry_sourceSwitchDuringDelay_noStaleRetry() {
+        val t = Scripted(ArrayDeque(listOf(FailReason.VisualizerUnavailable)))
+        t.session.dispatch(AudioEvent.ActivityStarted(hasPermission = true))
+        scope.runCurrent()
+        scope.advanceTimeBy(500)
+        t.session.dispatch(AudioEvent.SelectSource(Source.HighQuality))
+        val awaiting = t.state
+        assertTrue(awaiting is AudioState.AwaitingConsent)
+        scope.advanceTimeBy(2000)
+        scope.runCurrent()
+        assertEquals(1, t.creates)
+        assertEquals(awaiting, t.state)
     }
 }

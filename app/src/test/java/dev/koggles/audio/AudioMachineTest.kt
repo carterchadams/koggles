@@ -238,10 +238,10 @@ class AudioMachineTest {
         )
     }
 
-    // Rows: Starting + SourceFailed(r); Failed(VisualizerUnavailable) + SelectSource(HQ).
+    // Rows: Starting + SourceFailed(r) after the constructor retry; Failed(VisualizerUnavailable) + SelectSource(HQ).
     @Test
     fun sourceFailed_visualizerUnavailable_thenSelectHighQuality_launchesConsent() {
-        val starting = visible(AudioState.Starting)
+        val starting = visible(AudioState.Starting).copy(visualizerRetried = true)
         val failed = check(
             reduce(starting, AudioEvent.SourceFailed(FailReason.VisualizerUnavailable)),
             AudioState.Failed(FailReason.VisualizerUnavailable),
@@ -410,5 +410,93 @@ class AudioMachineTest {
         val (next, effects) = reduce(active, AudioEvent.SourceFailed(FailReason.CaptureLost))
         assertEquals(AudioState.Failed(FailReason.CaptureLost), next.state)
         assertEquals(listOf(AudioEffect.StopSource, AudioEffect.FlushAudio), effects)
+    }
+
+    // ---- Field report 1, P4: a Visualizer held by another app is "busy" and retried. ----
+
+    private val busy = AudioState.Failed(FailReason.VisualizerBusy)
+
+    @Test
+    fun startingBusy_failsBusy_schedulesRetry2000() {
+        check(
+            reduce(visible(AudioState.Starting), AudioEvent.SourceFailed(FailReason.VisualizerBusy)),
+            busy,
+            StopSource,
+            AudioEffect.ScheduleRetry(2000),
+        )
+    }
+
+    @Test
+    fun failedBusy_retry_begins() {
+        check(reduce(visible(busy), AudioEvent.Retry), AudioState.Starting, StartSource(Source.Standard))
+    }
+
+    @Test
+    fun failedBusy_retryWhileStopped_unchanged() {
+        val stopped = visible(busy).copy(activityStarted = false)
+        val (s, effects) = reduce(stopped, AudioEvent.Retry)
+        assertEquals(stopped, s)
+        assertEquals(emptyList<AudioEffect>(), effects)
+    }
+
+    @Test
+    fun failedBusy_activityStarted_begins() {
+        val stopped = visible(busy).copy(activityStarted = false)
+        check(
+            reduce(stopped, AudioEvent.ActivityStarted(hasPermission = true)),
+            AudioState.Starting,
+            StartSource(Source.Standard),
+        )
+    }
+
+    @Test
+    fun startingUnavailable_firstTime_staysStarting_schedulesRetry1000() {
+        val s = check(
+            reduce(visible(AudioState.Starting), AudioEvent.SourceFailed(FailReason.VisualizerUnavailable)),
+            AudioState.Starting,
+            StopSource,
+            AudioEffect.ScheduleRetry(1000),
+        )
+        assertTrue(s.visualizerRetried)
+        // The scheduled retry restarts the source.
+        check(reduce(s, AudioEvent.Retry), AudioState.Starting, StartSource(Source.Standard))
+    }
+
+    @Test
+    fun startingUnavailable_afterRetry_failsUnavailable() {
+        check(
+            reduce(
+                visible(AudioState.Starting).copy(visualizerRetried = true),
+                AudioEvent.SourceFailed(FailReason.VisualizerUnavailable),
+            ),
+            AudioState.Failed(FailReason.VisualizerUnavailable),
+            StopSource,
+        )
+    }
+
+    @Test
+    fun retried_resetsOnSourceStartedAndSelectSource() {
+        val retried = visible(AudioState.Starting).copy(visualizerRetried = true)
+        assertFalse(reduce(retried, AudioEvent.SourceStarted).first.visualizerRetried)
+        assertFalse(reduce(retried, AudioEvent.SelectSource(Source.HighQuality)).first.visualizerRetried)
+    }
+
+    // A transient "unsupported" must not stick for the life of the process: a new foreground retries.
+    @Test
+    fun failedUnavailable_activityStarted_begins_withFreshRetry() {
+        val stopped = visible(AudioState.Failed(FailReason.VisualizerUnavailable))
+            .copy(activityStarted = false, visualizerRetried = true)
+        val s = check(
+            reduce(stopped, AudioEvent.ActivityStarted(hasPermission = true)),
+            AudioState.Starting,
+            StartSource(Source.Standard),
+        )
+        assertFalse(s.visualizerRetried)
+    }
+
+    @Test
+    fun startingRetry_withoutScheduledRetry_unchanged() {
+        val starting = visible(AudioState.Starting)
+        assertEquals(starting to emptyList<AudioEffect>(), reduce(starting, AudioEvent.Retry))
     }
 }
