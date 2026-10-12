@@ -109,6 +109,35 @@ class PlaylistTest {
         assertIdle(p.next())
     }
 
+    // Human decision Q1 (2026-10-11): "empty favorites scope should just act as default behavior".
+    @Test fun favoritesScope_noFavorites_playsAllEnabled() {
+        val cat = flatCatalog(3)
+        val p = playlist(cat) { it.copy(scope = Scope.Favorites) }
+        assertEquals(keysOf(cat).toSet(), p.reachable())
+    }
+
+    @Test fun favoritesScope_onlyMissingFavorites_playsAllEnabled() {
+        val cat = flatCatalog(3)
+        val p = playlist(cat) { it.copy(scope = Scope.Favorites, favorites = setOf("user:gone/x.milk")) }
+        assertEquals(keysOf(cat).toSet(), p.reachable())
+    }
+
+    @Test fun favoritesScope_allFavoritesSkipped_playsAllEnabled() {
+        val cat = flatCatalog(3)
+        val p = playlist(cat) {
+            it.copy(scope = Scope.Favorites, favorites = setOf("bundled:p/p0.milk"), skipped = setOf("bundled:p/p0.milk"))
+        }
+        assertEquals(setOf("bundled:p/p1.milk", "bundled:p/p2.milk"), p.reachable())
+    }
+
+    @Test fun favoritesScope_gainsAFavorite_restrictsAgain() {
+        val cat = flatCatalog(3)
+        val p = playlist(cat) { it.copy(scope = Scope.Favorites) }
+        assertEquals(3, p.reachable().size)
+        p.update(inputs(cat, scope = Scope.Favorites, favorites = setOf("bundled:p/p1.milk")))
+        assertEquals(setOf("bundled:p/p1.milk"), p.reachable())
+    }
+
     @Test fun scopeFolderOfDisabledPack_isEmpty() {
         val cat = catalogOf(pack("bundled:a", "a0.milk"), pack("user:b", "f/b0.milk", "f/b1.milk"))
         val p = playlist(cat) { it.copy(scope = Scope.Folder("user:b", "f"), disabledPacks = setOf("user:b")) }
@@ -118,7 +147,8 @@ class PlaylistTest {
 
     @Test fun emptyScope_idleWithNotice() {
         val cat = flatCatalog(3)
-        val p = playlist(cat) { it.copy(scope = Scope.Favorites) }
+        // A folder scope whose pack exists but holds nothing in that folder.
+        val p = playlist(cat) { it.copy(scope = Scope.Folder("bundled:p", "nope")) }
         assertIdle(p.start(null))
         assertIdle(p.next())
         assertIdle(p.random())
