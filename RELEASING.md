@@ -66,15 +66,38 @@ gh workflow run release.yml --ref main -f version=0.0.1
 ```
 
 1. Approve the `release` environment when asked.
-2. When the run is green, download the files with `gh run download <run-id>`.
-3. Check the APK yourself:
-   `tools/ci/verify-release-apk.sh koggles-v0.0.1.apk koggles-v0.0.1-mapping.txt 0.0.1 1 <cert>`.
+2. When the run is green, download only the release files into `dist/`:
+
+   ```sh
+   gh run download <run-id> -n koggles-v0.0.1 -D dist
+   ```
+
+3. Check the APK yourself, with the Android SDK on the path:
+
+   ```sh
+   source tools/env.sh
+   tools/ci/verify-release-apk.sh dist/koggles-v0.0.1.apk dist/koggles-v0.0.1-mapping.txt 0.0.1 1 \
+     "$(gh variable get KOGGLES_CERT_SHA256)"
+   ```
 
 A dispatched run never publishes; only a tag push does.
 
 ## Publishing
 
-On an up-to-date `main`:
+**Stop unless the MVP sign-off holds.** The workflow checks the build, not these. Every item must
+be true before you tag (`plans/RELEASE-HARDENING.md` R8, Blueprint Task 21 Step 8):
+
+- every gate record in `docs/verification/` says PASS: G1–G4, including G2's physical-phone
+  matrix, G3's headset fit and G4's on-phone performance;
+- every row in `docs/verification/manual-checklist.md` says PASS, including the release-build
+  walk-through on a physical phone;
+- every row in `docs/claude-response/2026-10-11-koggles-rulings-for-human.md` is resolved
+  (remediation R4);
+- the release-plan decisions H6 (protections) and H7 (licensing for public distribution) are
+  made;
+- all automated suites are green, and a dry run of this exact commit passed.
+
+If anything is open, don't tag. Then, on an up-to-date `main`:
 
 ```sh
 git tag -a v0.1.0 -m "Koggles 0.1.0: <what changed>"
