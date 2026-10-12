@@ -38,12 +38,19 @@ class BundledPresetsCompileTest {
         FakeAudio.uninstall()
     }
 
+    /** Every .milk asset under [dir], recursively (the pack is flat plus `! Transition/`). */
+    private fun presetsUnder(assets: android.content.res.AssetManager, dir: String): List<String> =
+        assets.list(dir)!!.sorted().flatMap { name ->
+            val path = "$dir/$name"
+            if (assets.list(path)!!.isNotEmpty()) presetsUnder(assets, path) else listOf(path).filter { it.endsWith(".milk") }
+        }
+
     @Test fun everyBundledPreset_loadsWithItsOwnShaders() {
         val assets = AppGraph.app.assets
         val pack = "presets/${BundledPackTest.PACK}"
         val extra = InstrumentationRegistry.getArguments().getString("extraPresets").orEmpty()
             .split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        val paths = assets.list(pack)!!.sorted().map { "$pack/$it" } + extra
+        val paths = presetsUnder(assets, pack) + extra
         assertTrue("no bundled presets under $pack", paths.size > extra.size)
         val bad = PresetProbe.withRenderer { probe ->
             paths.mapNotNull { path ->

@@ -11,6 +11,12 @@ import java.util.concurrent.ConcurrentHashMap
  * diagnostics builds (-PkogglesShaderDiagnostics) it also reads projectM's own preset messages,
  * because projectM 4.1.7 swallows warp and composite shader failures (it drops the warp shader or
  * substitutes the default composite shader) without reporting a failed load.
+ *
+ * Its loads bypass the playback controller and push the renderer's request ids far above the
+ * controller's own counter, so for the rest of the process the controller's loads count as superseded.
+ * Tests that need real playback (e.g. AutoAdvanceTest) must not run after a probe in the same
+ * instrumentation process. The full suite's alphabetical order satisfies this, as it already did for
+ * PresetCallbackTest's direct loads; run such tests separately in targeted runs.
  */
 class PresetProbe private constructor(private val textures: List<String>) : AutoCloseable {
 

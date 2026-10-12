@@ -9,20 +9,35 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Preset plan M1: the APK bundles exactly the hash-pinned allowlist (app/bundled-presets.txt, packaged
- * into this test APK): the same flattened file names under presets/Koggles Starter Pack/, the same
- * bytes, and nothing else under presets/.
+ * Preset plan M1: the APK bundles exactly the hash-pinned allowlists (app/bundled-presets.txt flat, and
+ * app/bundled-transitions.txt under `! Transition/`, both packaged into this test APK): the same paths,
+ * the same bytes, no other subfolder, and nothing else under presets/.
  */
 @RunWith(AndroidJUnit4::class)
 class BundledPackTest {
     private val appAssets = InstrumentationRegistry.getInstrumentation().targetContext.assets
     private val testAssets = InstrumentationRegistry.getInstrumentation().context.assets
 
-    /** File name -> SHA-256, from the allowlist's "<sha256>  <path>" lines. */
+    /** Pack-relative path -> SHA-256: classic presets flat, transitions under `! Transition/`. */
     private fun allowlist(): Map<String, String> =
-        testAssets.open("bundled-presets.txt").bufferedReader().readLines()
+        entries("bundled-presets.txt").associate { (hash, path) -> path.substringAfterLast('/') to hash } +
+            entries("bundled-transitions.txt").associate { (hash, path) -> "$TRANSITIONS/${path.substringAfterLast('/')}" to hash }
+
+    private fun entries(asset: String): List<Pair<String, String>> =
+        testAssets.open(asset).bufferedReader().readLines()
             .map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
-            .associate { it.substringAfter("  ").substringAfterLast('/') to it.substringBefore("  ") }
+            .map { it.substringBefore("  ") to it.substringAfter("  ") }
+
+    /** Every file under presets/<PACK>, recursively, as pack-relative paths; and the subfolders seen. */
+    private fun bundled(dir: String = "presets/$PACK", rel: String = "", dirs: MutableSet<String> = mutableSetOf()): Pair<Set<String>, Set<String>> {
+        val files = mutableSetOf<String>()
+        for (name in appAssets.list(dir)!!) {
+            val path = if (rel.isEmpty()) name else "$rel/$name"
+            val children = appAssets.list("$dir/$name")!!
+            if (children.isEmpty()) files += path else { dirs += path; files += bundled("$dir/$name", path, dirs).first }
+        }
+        return files to dirs
+    }
 
     private fun sha256(path: String): String = appAssets.open(path).use {
         MessageDigest.getInstance("SHA-256").digest(it.readBytes())
@@ -30,17 +45,18 @@ class BundledPackTest {
 
     @Test fun onlyTheStarterPackIsBundled() = assertEquals(listOf(PACK), appAssets.list("presets")!!.toList())
 
-    @Test fun packFiles_matchTheAllowlist_byNameAndContent() {
+    @Test fun packFiles_matchTheAllowlists_byPathAndContent() {
         val want = allowlist()
-        val have = appAssets.list("presets/$PACK")!!.toSet()
+        val (have, dirs) = bundled()
         val missing = (want.keys - have).sorted()
         val extra = (have - want.keys).sorted()
         val changed = (want.keys intersect have).filter { sha256("presets/$PACK/$it") != want.getValue(it) }.sorted()
         assertTrue("missing=$missing extra=$extra changed=$changed", missing.isEmpty() && extra.isEmpty() && changed.isEmpty())
-        assertEquals(want.size, have.size)
+        assertEquals("only '$TRANSITIONS' may be nested", setOf(TRANSITIONS), dirs)
     }
 
     companion object {
         const val PACK = "Koggles Starter Pack"
+        const val TRANSITIONS = "! Transition"
     }
 }

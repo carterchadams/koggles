@@ -1,0 +1,8 @@
+# Koggles Starter Pack transitions (plans/PRESET-PACK-CLASSIC.md, DP5): Cream of the Crop's
+# '! Transition' presets, https://github.com/projectM-visualizer/presets-cream-of-the-crop at cotcSha in
+# gradle/libs.versions.toml, staged under 'presets/Koggles Starter Pack/! Transition/'.
+# One file per line: sha256, two spaces, path in that repo. The build verifies every hash.
+b32999cc37372c07643f0f61b14796256af05ef0eee32a82e4ad9e254c1f6dfa  ! Transition/Fast transition to black - levels effect === Goody's Lightning (ps 2-0) --- Isosceles edit.milk
+75e59393eccd73355cc849395c32bdf14e252cd75c416400399e546b5fc04db6  ! Transition/Slow transition to black - gas effect + zoom in + orange filter === Tripgnosis - FlameOrb --- Isosceles edit.milk
+12dee4f72a6d28f859cb532dea4cdbbe4166145ca3e65c7c7cb75c37fac97a3f  ! Transition/Slow transition to black - gas effect + zoom in === Tripgnosis - FlameOrb --- Isosceles edit.milk
+a250de6273249e15a19fb3812fb53e93eb6910eb8a2fd6685465809e7bece0d2  ! Transition/Slow transition to black - gas effect + zoom out === amandio c - magnetosphere --- Isosceles edit.milk

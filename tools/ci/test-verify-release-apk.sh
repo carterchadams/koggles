@@ -69,6 +69,9 @@ if [ "${1:-}" != "--fixtures" ]; then
   mkdir -p "$tmp/c"; (cd "$tmp/c" && unzip -q "$apk" "$victim" && printf '\n// changed\n' >> "$victim")
   cp "$apk" "$tmp/m-changed.apk"; zip -qd "$tmp/m-changed.apk" "$victim"; (cd "$tmp/c" && zip -q "$tmp/m-changed.apk" "$victim")
   resign "$tmp/m-changed.apk" "$tmp/m-changed.s.apk"; only5 content-changed "$tmp/m-changed.s.apk"
+  mkdir -p "$tmp/n/$pk/Other"; printf 'MILKDROP_PRESET_VERSION=201\n' > "$tmp/n/$pk/Other/Koggles - Nested.milk"
+  cp "$apk" "$tmp/m-nested.apk"; (cd "$tmp/n" && zip -q "$tmp/m-nested.apk" "$pk/Other/Koggles - Nested.milk")
+  resign "$tmp/m-nested.apk" "$tmp/m-nested.s.apk"; only5 content-nested-outside-transitions "$tmp/m-nested.s.apk"
 fi
 echo "verify-release-apk: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

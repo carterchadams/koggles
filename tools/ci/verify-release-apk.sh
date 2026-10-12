@@ -48,19 +48,25 @@ if [ -z "$missing" ]; then ok 4 native-libs; else bad 4 native-libs "missing$mis
 # 5 content and licences: the bundled presets are exactly the hash-pinned allowlist (one flat folder,
 # same names, same SHA-256; plans/PRESET-PACK-CLASSIC.md), and the licence files are present.
 allowlist="${ALLOWLIST:-$here/../../app/bundled-presets.txt}"
-content="$(python3 - "$apk" "$allowlist" <<'PY' 2>&1
+transitions="${TRANSITIONS_ALLOWLIST:-$here/../../app/bundled-transitions.txt}"
+content="$(python3 - "$apk" "$allowlist" "$transitions" <<'PY' 2>&1
 import hashlib, sys, zipfile
-apk, allow = sys.argv[1], sys.argv[2]
+apk, allow, trans = sys.argv[1], sys.argv[2], sys.argv[3]
 pack = "assets/presets/Koggles Starter Pack/"
+sub = "! Transition/"  # the only subfolder allowed (transition presets)
 want = {}
-for line in open(allow, encoding="utf-8"):
-    line = line.strip()
-    if line and not line.startswith("#"):
-        digest, path = line.split("  ", 1)
-        want[path.rsplit("/", 1)[-1]] = digest
+for listfile, prefix in ((allow, ""), (trans, sub)):
+    for line in open(listfile, encoding="utf-8"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            digest, path = line.split("  ", 1)
+            want[prefix + path.rsplit("/", 1)[-1]] = digest
 with zipfile.ZipFile(apk) as z:
     names = [n for n in z.namelist() if n.startswith("assets/presets/") and not n.endswith("/")]
-    outside = sorted(n for n in names if not n.startswith(pack) or "/" in n[len(pack):])
+    def placed(n):
+        rel = n[len(pack):]
+        return n.startswith(pack) and ("/" not in rel or (rel.startswith(sub) and "/" not in rel[len(sub):]))
+    outside = sorted(n for n in names if not placed(n))
     have = {n[len(pack):]: hashlib.sha256(z.read(n)).hexdigest() for n in names if n not in outside}
 missing = sorted(set(want) - set(have))
 extra = sorted(set(have) - set(want))
