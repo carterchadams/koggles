@@ -126,4 +126,32 @@ class AutoAdvanceTest {
             runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 30, interstitials = true) } }
         }
     }
+
+    /**
+     * Q4 (plans/REQUEST-ID-FIX.md): another loader (the debug G4 harness, a test probe, a future
+     * preview) can put its own preset on screen with a newer request id. Playback must take control
+     * back at the next switch request. It used to ignore every switch request carrying the foreign id,
+     * and every load it issued below that id was superseded, so playback froze for the process.
+     */
+    @Test fun autoAdvance_resumesAfterAForeignLoad() {
+        runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 15, interstitials = false) } }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                val start = SystemClock.elapsedRealtime() + 20_000
+                while (SystemClock.elapsedRealtime() < start && synchronized(loads) { loads.isEmpty() }) Thread.sleep(100)
+                assertTrue("no playback load at start", synchronized(loads) { loads.isNotEmpty() })
+                val data = AppGraph.app.assets.open("g1/ok.milk").bufferedReader().use { it.readText() }
+                val foreign = (AppGraph.renderCommands.state.value.preset?.requestId ?: 0L) + 1_000
+                AppGraph.renderCommands.loadPreset(data, foreign, false, emptyList()) // as the G4 harness does
+                val deadline = SystemClock.elapsedRealtime() + 25_000 // one 15 s duration plus margin
+                while (SystemClock.elapsedRealtime() < deadline && synchronized(loads) { loads.none { it.requestId > foreign } }) {
+                    Thread.sleep(250)
+                }
+                val resumed = synchronized(loads) { loads.filter { it.requestId > foreign } }
+                assertTrue("playback did not resume after a foreign load (id $foreign): $loads", resumed.isNotEmpty())
+            }
+        } finally {
+            runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 30, interstitials = true) } }
+        }
+    }
 }

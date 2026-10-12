@@ -391,6 +391,52 @@ class PlaylistTest {
         assertEquals(keysOf(cat)[3], p.current?.key)
     }
 
+    // ---- Request ids (plans/REQUEST-ID-FIX.md) ----
+
+    /** Q1: ids never fall below the renderer's current request, whoever loaded it. */
+    @Test fun ids_neverFallBelowTheFloor() {
+        var floor = 0L
+        val p = Playlist(Random(42)) { floor }.also { it.update(inputs(flatCatalog(5))) }
+        val first = p.next().requestId
+        floor = first + 1_000 // another loader's request is on screen
+        val second = p.next().requestId
+        assertTrue("id $second must be above the floor $floor", second > floor)
+        assertEquals(second + 1, p.next().requestId) // consecutive again afterwards
+    }
+
+    /** PQ1: a reissue keeps target, kind and the pending interstitial, under a new id above the floor. */
+    @Test fun reissueLatest_keepsTargetKindAndPendingInterstitial() {
+        var floor = 0L
+        val p = Playlist(Random(42)) { floor }.also { it.update(inputs(mixed).copy(interstitials = true)) }
+        val r = p.next()
+        assertEquals(Kind.Interstitial, r.kind)
+        floor = r.requestId + 1_000
+        val again = p.reissueLatest()!!
+        assertTrue(again.requestId > floor)
+        assertEquals(r.target, again.target)
+        assertEquals(r.kind, again.kind)
+        assertEquals(again, p.pendingInterstitial) // re-keyed: its timer elapses under the new id
+        assertEquals(again.requestId, p.latestRequestId)
+        val d = p.onInterstitialElapsed(again.requestId)!!
+        assertEquals(Kind.Normal, d.kind)
+        assertFalse(presetKey(d) in transitions)
+    }
+
+    /** PQ1: a reissued history step keeps the history walk (no duplicate entry). */
+    @Test fun reissueLatest_keepsHistoryNavigation() {
+        var floor = 0L
+        val p = Playlist(Random(42)) { floor }.also { it.update(inputs(flatCatalog(5))) }
+        val a = p.play { next() }
+        val b = p.play { next() }
+        p.play { next() }
+        val back = p.previous()!!
+        assertEquals(b, presetKey(back))
+        floor = back.requestId + 1_000
+        val again = p.reissueLatest()!!
+        p.onLoaded(again.requestId)
+        assertEquals(a, presetKey(p.previous()!!))
+    }
+
     // ---- Interstitials ----
 
     private val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "p2.milk", "p3.milk", "p4.milk", "!t/t0.milk", "!t/t1.milk"))

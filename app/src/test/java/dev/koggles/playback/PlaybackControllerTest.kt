@@ -44,12 +44,21 @@ class PlaybackControllerTest {
         }
     }
 
+    /** Models RenderCommands: a load below the current request is dropped (superseded). */
     private class FakeSink : RenderSink {
         val calls = mutableListOf<String>()
+        var current = 0L
+        override val currentRequestId: Long get() = current
         override fun load(data: String, requestId: Long, smooth: Boolean, texturePaths: List<String>) {
+            if (requestId < current) { calls += "superseded($requestId)"; return }
+            current = requestId
             calls += "load($data,$requestId,$smooth,${texturePaths.joinToString()})"
         }
-        override fun loadIdle(requestId: Long) { calls += "idle($requestId)" }
+        override fun loadIdle(requestId: Long) {
+            if (requestId < current) { calls += "superseded($requestId)"; return }
+            current = requestId
+            calls += "idle($requestId)"
+        }
         fun loads() = calls.filter { it.startsWith("load(") }
     }
 
@@ -80,7 +89,7 @@ class PlaybackControllerTest {
         // Not backgroundScope: advanceUntilIdle() does not drive background work.
         val scope = CoroutineScope(StandardTestDispatcher(testScheduler) + SupervisorJob())
         scopes += scope
-        return PlaybackController(scope, Playlist(Random(seed)), sink, reader, texturePaths, settings, library, libState, onUserReadFailure)
+        return PlaybackController(scope, Playlist(Random(seed)) { sink.currentRequestId }, sink, reader, texturePaths, settings, library, libState, onUserReadFailure)
     }
 
     private val scopes = mutableListOf<CoroutineScope>()
@@ -249,6 +258,54 @@ class PlaybackControllerTest {
         val c = controller(); c.start(); advanceUntilIdle()
         c.onSwitchRequested(false, c.nowPlayingRequestId()); advanceUntilIdle()
         assertEquals(2, sink.loads().size)
+    }
+
+    private fun idOf(call: String) = call.substringAfterLast("load(").split(",")[1].toLong()
+
+    /** Q1: after another loader's request, the controller's next load is above it (not superseded). */
+    @Test fun afterAForeignLoad_nextLoadIsAboveTheRenderersRequest() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val foreign = c.nowPlayingRequestId() + 1_000
+        sink.current = foreign // a foreign load was accepted by the renderer
+        c.next(); advanceUntilIdle()
+        assertTrue("next load must be above $foreign: ${sink.calls}", idOf(sink.loads().last()) > foreign)
+    }
+
+    /**
+     * Q6 / PQ1: our load is pending (read in flight) when a higher-id foreign load is accepted and
+     * fails. Our pending load is then superseded and the renderer keeps showing our older preset, whose
+     * switch callbacks are stale. Playback must still recover, reloading our latest target above the
+     * foreign id, without manual navigation.
+     */
+    @Test fun failedForeignLoad_whileOwnLoadPending_reissuesLatestAboveFloor() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val shown = c.nowPlayingRequestId()
+        c.onPresetLoaded(shown)
+        val target = keys.first { it != loadedKey(sink.loads().single()) }
+        gates[target] = CompletableDeferred()
+        c.select(target); advanceUntilIdle() // our latest: its read is in flight
+        val foreign = c.nowPlayingRequestId() + 1_000
+        sink.current = foreign // accepted ...
+        c.onPresetFailed(foreign, "foreign preset failed"); advanceUntilIdle() // ... and failed
+        gates[target]!!.complete(Unit); advanceUntilIdle()
+        c.onSwitchRequested(false, shown); advanceUntilIdle() // the older displayed id: stale
+        val last = sink.loads().last()
+        assertEquals(target, loadedKey(last))
+        assertTrue("reloaded above $foreign: ${sink.calls}", idOf(last) > foreign)
+    }
+
+    /** Q2 (plans/REQUEST-ID-FIX.md): a newer id on screen came from another loader; take control back. */
+    @Test fun switchRequestForAForeignPreset_takesControlAndAdvances() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        c.onSwitchRequested(false, c.nowPlayingRequestId() + 1_000); advanceUntilIdle()
+        assertEquals(2, sink.loads().size)
+    }
+
+    @Test fun switchRequestForAForeignPreset_whenLocked_ignored() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        c.setLocked(true); advanceUntilIdle()
+        c.onSwitchRequested(false, c.nowPlayingRequestId() + 1_000); advanceUntilIdle()
+        assertEquals(1, sink.loads().size)
     }
 
     @Test fun hardCutRequested_loadsWithSmoothFalse() = runTest {

@@ -20,6 +20,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /** Where loads go; [dev.koggles.render.RenderCommands] in production. */
 interface RenderSink {
+    /**
+     * The request the renderer treats as current; loads with a lower id are dropped. 0 if none. Read
+     * on the main thread, like every other playback call (projectM's upcalls are re-posted to main).
+     */
+    val currentRequestId: Long
     fun load(data: String, requestId: Long, smooth: Boolean, texturePaths: List<String>)
     fun loadIdle(requestId: Long)
 }
@@ -135,10 +140,12 @@ class PlaybackController(
     /**
      * projectM's timer or beat asks to advance. [requestId] is the request the renderer was showing:
      * events for a superseded request (a newer command is in flight or done) are dropped, as are
-     * events delivered after locking or during an interstitial (its own timer advances it).
+     * events delivered after locking or during an interstitial (its own timer advances it). An id
+     * *newer* than ours came from another loader (debug harness, test, preview), since our ids never
+     * exceed our latest: advance as usual, taking playback back (plans/REQUEST-ID-FIX.md).
      */
     override fun onSwitchRequested(hardCut: Boolean, requestId: Long) {
-        if (requestId != playlist.latestRequestId) return
+        if (requestId < playlist.latestRequestId) return
         if (values.locked || values.presetDurationSec == 0) return
         if (lastIssued?.kind == Kind.Interstitial) return
         hardCutPending = hardCut
@@ -146,6 +153,15 @@ class PlaybackController(
     }
 
     override fun onPresetFailed(requestId: Long, message: String) {
+        // PQ1: the renderer's newest request came from another loader and failed while ours was still
+        // in flight, so ours was superseded and never shown, and the screen keeps an older preset whose
+        // switch events are stale. Load our latest target again, above the floor.
+        if (requestId > playlist.latestRequestId && requestId == sink.currentRequestId &&
+            lastLoadedId != playlist.latestRequestId
+        ) {
+            playlist.reissueLatest()?.let(::process)
+            return
+        }
         playlist.onLoadFailed(requestId)?.let(::process)
     }
 

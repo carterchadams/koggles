@@ -87,6 +87,7 @@ class GrantLossIntegrationTest {
         lateinit var controller: PlaybackController
         val keyById = HashMap<Long, String>()
         val sink = object : RenderSink {
+            override val currentRequestId = 0L // this test has no other loader
             override fun load(data: String, requestId: Long, smooth: Boolean, texturePaths: List<String>) {
                 keyById[requestId] = controller.nowPlaying.value.ref!!.key
                 scope.launch { controller.onPresetLoaded(requestId); acked += currentTime to keyById.getValue(requestId) }

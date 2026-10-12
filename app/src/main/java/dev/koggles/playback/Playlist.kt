@@ -37,7 +37,7 @@ const val EMPTY_SCOPE_NOTICE = "No playable presets in this scope"
  * - Every issued request supersedes the previous one and cancels any pending interstitial;
  *   callbacks carrying older ids are ignored.
  */
-class Playlist(private val random: Random) {
+class Playlist(private val random: Random, private val idFloor: () -> Long = { 0L }) {
 
     private var inputs: PlaylistInputs? = null
     private var candidates: List<PresetRef> = emptyList()
@@ -146,6 +146,30 @@ class Playlist(private val random: Random) {
             recompute()
         }
         return next()
+    }
+
+    /**
+     * The latest request again under a new id above the floor (plans/REQUEST-ID-FIX.md, PQ1): for
+     * when another loader's request superseded it before it was shown. Keeps its target and kind, a
+     * pending interstitial (re-keyed to the new id, so its timer matches), the pending destination and
+     * the history position it came from; [current] is unchanged.
+     */
+    fun reissueLatest(): PlayRequest? {
+        val r = latest ?: return null
+        val again = r.copy(requestId = allocateId())
+        latest = again
+        if (pendingInterstitial?.requestId == r.requestId) pendingInterstitial = again
+        return again
+    }
+
+    /**
+     * Never below the renderer's current request, whoever loaded it (a debug harness, a test, a
+     * preview): a lower id would be dropped as superseded (plans/REQUEST-ID-FIX.md). Main thread only,
+     * like the rest of playback; [idFloor] reads RenderCommands' state flow.
+     */
+    private fun allocateId(): Long {
+        nextId = maxOf(nextId, idFloor()) + 1
+        return nextId
     }
 
     fun onLoaded(requestId: Long) {
@@ -262,7 +286,7 @@ class Playlist(private val random: Random) {
 
     private fun issue(target: Target, kind: Kind): PlayRequest {
         val r = PlayRequest(
-            requestId = ++nextId,
+            requestId = allocateId(),
             target = target,
             kind = kind,
             notice = if (target == Target.Idle) EMPTY_SCOPE_NOTICE else null,

@@ -12,11 +12,8 @@ import java.util.concurrent.ConcurrentHashMap
  * because projectM 4.1.7 swallows warp and composite shader failures (it drops the warp shader or
  * substitutes the default composite shader) without reporting a failed load.
  *
- * Its loads bypass the playback controller and push the renderer's request ids far above the
- * controller's own counter, so for the rest of the process the controller's loads count as superseded.
- * Tests that need real playback (e.g. AutoAdvanceTest) must not run after a probe in the same
- * instrumentation process. The full suite's alphabetical order satisfies this, as it already did for
- * PresetCallbackTest's direct loads; run such tests separately in targeted runs.
+ * Its loads bypass the playback controller with ids above the controller's; playback takes control
+ * back afterwards (plans/REQUEST-ID-FIX.md), so later tests that need real playback are unaffected.
  */
 class PresetProbe private constructor(private val textures: List<String>) : AutoCloseable {
 
@@ -85,6 +82,13 @@ class PresetProbe private constructor(private val textures: List<String>) : Auto
                     s == AudioState.Active && AppGraph.renderCommands.attachedHandle != 0L
                 }) { "app not ready" }
                 check(waitFor(30_000) { AppGraph.libraryRepo.state.value.bundledTextureDir != null }) { "textures not ready" }
+                // Playback's own loads now outrank loads from elsewhere (plans/REQUEST-ID-FIX.md): its startup or
+                // an interstitial ending would supersede a probe load in flight. Wait until it is idle (latest
+                // load applied, no interstitial pending); the probing tests lock playback, so nothing new starts.
+                check(waitFor(30_000) {
+                    val id = AppGraph.playback.nowPlayingRequestId()
+                    id > 0 && AppGraph.renderCommands.lastAppliedRequestId >= id && !AppGraph.playback.nowPlaying.value.interstitial
+                }) { "playback did not settle" }
                 // A newly attached renderer replays the last preset load; let it finish before probing,
                 // so its messages can't land in the first probe's window.
                 if (NativeBridge.diagnosticsEnabled()) {
