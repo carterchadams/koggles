@@ -2,7 +2,8 @@ package dev.koggles.audio
 
 /**
  * Same-process bridge from [CaptureService] to the [PlaybackCaptureSource] that started it,
- * keyed by source generation so callbacks from a superseded capture are dropped (F3).
+ * keyed by source generation so callbacks from a superseded capture are dropped instead of
+ * corrupting the state of the source that replaced it.
  */
 object CaptureBus {
     private val listeners = HashMap<Long, AudioSourceListener>()

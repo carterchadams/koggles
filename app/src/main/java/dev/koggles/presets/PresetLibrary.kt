@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /**
- * Per-pack and per-preset user marks (spec §5.1). Packs are enabled unless listed in
+ * Per-pack and per-preset user marks (favourite, skipped, disabled pack). Packs are enabled unless listed in
  * [disabledPacks]. Keys are never pruned against the catalog: marks on vanished presets stay
  * dormant and apply again if the path reappears.
  */

@@ -15,7 +15,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-/** D1: the menu's always-visible title bar; the "X" closes the menu. */
+/** The menu's always-visible title bar; the "X" is the visible way to close the menu (besides Back). */
 @Composable
 fun MenuTitleBar(onClose: () -> Unit) {
     Row(

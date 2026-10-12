@@ -185,7 +185,7 @@ class AudioSessionTest {
         assertEquals("open:${created.last().generation}", gateLog.last())
     }
 
-    // ---- Field report 1, P4: busy and constructor retries run on the session's scope. ----
+    // ---- Busy and constructor retries run on the session's scope (never a main-thread sleep). ----
 
     /** A source whose start outcome comes from [outcomes] (null = started); records live sources. */
     private inner class Scripted(val outcomes: ArrayDeque<FailReason?>) {

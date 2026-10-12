@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Release smoke test (plans/RELEASE-HARDENING.md, Task R1): proves on a device or emulator that a
+# Release smoke test: proves on a device or emulator that a
 # minified build's native→Kotlin upcalls work, by watching one auto-advance driven by them.
 #
 #   tools/ci/release-smoke.sh <apk>          (adb must reach exactly one device)

@@ -4,7 +4,8 @@
 
 namespace koggles {
 
-// Copy variant (G1 probe P1: projectM 4.1.7 always draws its final pass into framebuffer 0).
+// Copy variant: projectM 4.1.7 always draws its final pass into framebuffer 0 and ignores a
+// bound FBO (measured: a bound FBO kept its clear colour), so rendering into an FBO is not an option.
 // begin() sets an eye-sized viewport on framebuffer 0; projectM renders there; end() copies
 // that region into the eye texture. GL thread only.
 class EyeCapture {

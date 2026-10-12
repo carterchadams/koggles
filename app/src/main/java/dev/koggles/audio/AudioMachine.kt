@@ -1,6 +1,6 @@
 package dev.koggles.audio
 
-// Pure audio/permission state machine (spec §6). No Android imports: the
+// Pure audio/permission state machine. No Android imports: the
 // app-scoped AudioSession runs `reduce` and performs the returned effects.
 
 enum class Source { Standard, HighQuality }
@@ -83,7 +83,7 @@ fun reduce(s: AudioSnapshot, e: AudioEvent): Pair<AudioSnapshot, List<AudioEffec
                 st == AudioState.Idle || st == AudioState.NeedsConsent -> begin(f)
                 st == AudioState.Active && hq && !e.hasPermission -> STOP_AND_FLUSH then begin(f)
                 st is AudioState.PermissionDenied && st.permanent && e.hasPermission -> begin(f)
-                // Field report 1, P4: a new foreground retries a busy or unavailable Visualizer.
+                // A new foreground retries a busy or unavailable Visualizer: the other app may have let go meanwhile.
                 st == BUSY || st == UNAVAILABLE -> begin(f.copy(visualizerRetried = false))
                 else -> releasePending(f)
             }

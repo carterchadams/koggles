@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
 
-/** User settings (spec §4, §5.3, §6); defaults per the plan's Global Constraints. */
+/** User settings. The defaults are product decisions, not placeholders; tests rely on them. */
 data class SettingsValues(
     val presetDurationSec: Int = 30,
     val softCut: Boolean = true,
@@ -31,7 +31,7 @@ data class SettingsValues(
     val explainerSeen: Boolean = false,
     val scope: Scope = Scope.AllEnabled,
     val lastPresetKey: String? = null,
-    /** The first-run "Choose folder" prompt has been shown (spec §4 Library). */
+    /** The first-run "Choose folder" prompt has been shown; it is shown once per install. */
     val folderPrompted: Boolean = false,
 )
 

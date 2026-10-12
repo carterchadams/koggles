@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Release smoke verdict over a captured log (plans/RELEASE-HARDENING.md, Task R1).
+"""Release smoke verdict over a captured log: proves the minified build's native-to-Kotlin upcalls
+survived R8 by watching one auto-advance driven by them.
 
 Exit 0 = PASS, 1 = FAIL, 2 = not yet (keep waiting).
 PASS needs "upcalls ready 3/3" and an id-matched sequence

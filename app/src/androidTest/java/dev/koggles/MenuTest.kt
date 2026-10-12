@@ -174,7 +174,7 @@ class MenuTest {
         }
     }
 
-    /** D1: double tap no longer closes the menu, and the scrim passes nothing to the visualization. */
+    /** Double tap only opens the menu, never closes it, and the scrim passes nothing to the visualization. */
     @Test fun scrimDoubleTap_doesNotClose() {
         openMenu()
         menu.performTouchInput { doubleClick(Offset(4f, centerY)) }
@@ -229,7 +229,7 @@ class MenuTest {
         compose.onAllNodesWithText("cardboard", substring = true, ignoreCase = true).onFirst().assertExists()
     }
 
-    /** DP-copy (plans/PRESET-PACK-CLASSIC.md), approved by the human: exact text. */
+    /** The licences copy is user-visible text fixed by the developer: it must match exactly. */
     @Test fun licensesScreen_describesBundledContentExactly() {
         openMenu()
         scrollTo(hasText("About & licenses"))

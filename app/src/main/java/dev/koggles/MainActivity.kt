@@ -141,7 +141,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Spec §4: the one-time "Choose folder" prompt is pending (shown first, highlighted). */
+    /** The one-time "Choose folder" prompt is pending (shown first, highlighted). */
     private var highlightChooseFolder by mutableStateOf(false)
 
     private val folderLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -186,7 +186,7 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    /** First run without a folder: open the menu once on the Library section (spec §4). */
+    /** First run without a folder: open the menu once on the Library section, and never again. */
     private suspend fun promptForFolderOnce() {
         val library = AppGraph.libraryRepo.state.first { it.userProbed }
         if (library.hasGrant || AppGraph.settings.values.first().folderPrompted) return
@@ -215,7 +215,7 @@ class MainActivity : ComponentActivity() {
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         audio.dispatch(AudioEvent.ActivityStarted(granted))
-        // The folder may have been deleted or revoked while we were away (spec §7).
+        // The folder may have been deleted or revoked while we were away; playback must fall back to bundled.
         AppGraph.appScope.launch { AppGraph.libraryRepo.revalidate() }
     }
 

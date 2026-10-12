@@ -40,8 +40,9 @@ data class NowPlaying(val ref: PresetRef? = null, val notice: String? = null, va
  * Drives [Playlist] from user actions, projectM events and timers, and turns its requests into
  * loads. Main thread only (the [scope] must use the main dispatcher in production).
  *
- * F2: a request superseded while its preset text or texture paths were being fetched never reaches
- * the sink, and its outcome never reaches the playlist.
+ * A request superseded while its preset text or texture paths were being fetched never reaches
+ * the sink, and its outcome never reaches the playlist: a slow read finishing late must not
+ * replace a newer preset or count as its failure.
  */
 class PlaybackController(
     private val scope: CoroutineScope,
@@ -52,7 +53,7 @@ class PlaybackController(
     private val settings: Settings,
     private val library: PresetLibrary,
     private val libraryState: StateFlow<LibraryState>,
-    /** Awaited when a `user:` preset can't be read: re-checks the folder grant (spec §7). */
+    /** Awaited when a `user:` preset can't be read: re-checks the folder grant, since the folder may be gone. */
     private val onUserReadFailure: suspend () -> Unit = {},
 ) : NativeListener, PlaybackControls {
 
@@ -92,7 +93,10 @@ class PlaybackController(
         val values: SettingsValues,
     )
 
-    /** D8: once bundled presets are ready (and, for a user last-key, up to 3 s for the user index). */
+    /**
+     * Starts once bundled presets are ready (and, for a user last-key, waits up to 3 s for the user
+     * index): a fast start without losing the restore of the last user preset.
+     */
     fun start() {
         // Navigation while startup waits wins: startup must not issue a newer request over it.
         val before = playlist.latestRequestId
@@ -142,7 +146,8 @@ class PlaybackController(
      * events for a superseded request (a newer command is in flight or done) are dropped, as are
      * events delivered after locking or during an interstitial (its own timer advances it). An id
      * *newer* than ours came from another loader (debug harness, test, preview), since our ids never
-     * exceed our latest: advance as usual, taking playback back (plans/REQUEST-ID-FIX.md).
+     * exceed our latest: advance as usual, taking playback back. Ignoring it froze playback for the
+     * rest of the process once anything else had loaded a preset.
      */
     override fun onSwitchRequested(hardCut: Boolean, requestId: Long) {
         if (requestId < playlist.latestRequestId) return
@@ -153,7 +158,7 @@ class PlaybackController(
     }
 
     override fun onPresetFailed(requestId: Long, message: String) {
-        // PQ1: the renderer's newest request came from another loader and failed while ours was still
+        // The renderer's newest request came from another loader and failed while ours was still
         // in flight, so ours was superseded and never shown, and the screen keeps an older preset whose
         // switch events are stale. Load our latest target again, above the floor.
         if (requestId > playlist.latestRequestId && requestId == sink.currentRequestId &&
@@ -200,7 +205,7 @@ class PlaybackController(
                         throw e
                     } catch (e: Exception) {
                         if (target.ref.packId.startsWith("user:")) {
-                            // The folder may be gone (spec §7): let the library re-check it, and
+                            // The folder may be gone: let the library re-check it, and
                             // pick next only once the playlist has the result, so a lost folder
                             // can't burn through the failure bound.
                             onUserReadFailure()

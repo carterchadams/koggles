@@ -27,7 +27,7 @@ data class PlayRequest(val requestId: Long, val target: Target, val kind: Kind, 
 const val EMPTY_SCOPE_NOTICE = "No playable presets in this scope"
 
 /**
- * Rotation rules (spec §5.3, D12). Pure and single-threaded: callers serialise access.
+ * Rotation rules. Pure and single-threaded: callers serialise access.
  *
  * - Candidates: presets of enabled packs inside the scope (a folder scope includes its
  *   subfolders), minus skipped, broken and transition presets. Interstitial candidates are the
@@ -149,8 +149,9 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
     }
 
     /**
-     * The latest request again under a new id above the floor (plans/REQUEST-ID-FIX.md, PQ1): for
-     * when another loader's request superseded it before it was shown. Keeps its target and kind, a
+     * The latest request again under a new id above the floor: for when another loader's request
+     * superseded it before it was shown and then failed, leaving an older preset on screen whose
+     * switch events would be stale. Keeps its target and kind, a
      * pending interstitial (re-keyed to the new id, so its timer matches), the pending destination and
      * the history position it came from; [current] is unchanged.
      */
@@ -164,7 +165,7 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
 
     /**
      * Never below the renderer's current request, whoever loaded it (a debug harness, a test, a
-     * preview): a lower id would be dropped as superseded (plans/REQUEST-ID-FIX.md). Main thread only,
+     * preview): a lower id would be dropped as superseded and playback would freeze. Main thread only,
      * like the rest of playback; [idFloor] reads RenderCommands' state flow.
      */
     private fun allocateId(): Long {
@@ -235,8 +236,8 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
     }
 
     /**
-     * Spec §7: a pack or folder scope whose pack is no longer in the catalog (the user folder was
-     * lost) plays all enabled packs instead. The persisted scope is untouched, so it applies again
+     * A pack or folder scope whose pack is no longer in the catalog (the user folder was lost) plays
+     * all enabled packs instead of going idle. The persisted scope is untouched, so it applies again
      * once the pack returns.
      */
     private fun effectiveScope(inp: PlaylistInputs): Scope = when (val s = inp.scope) {

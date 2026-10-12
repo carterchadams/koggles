@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Prints the highest versionCode among published releases (0 if there are none)
-# (plans/RELEASE-HARDENING.md, RH6). Each code is derived from the release's tag name with
+# so a new release's versionCode can be required to be strictly higher and upgrades always install.
+# Each code is derived from the release's tag name with
 # version-from-tag.sh — the same canonical rule that built it — never from release notes.
 # Needs GH_TOKEN and GH_REPO. Drafts (never shipped) are excluded; prereleases count. Fails
 # closed on any query failure or any non-version tag.

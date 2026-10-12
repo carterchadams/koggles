@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Signing credentials reach Gradle unchanged through environment variables, including characters
 # java.util.Properties would mangle (leading space, backslash, '=', ':', '#', '!'). Non-ASCII is not
-# tested: Java's PKCS12 keystores reject non-ASCII passwords outright. (plans/RELEASE-HARDENING.md, R5)
+# tested: Java's PKCS12 keystores reject non-ASCII passwords outright.
 # Builds a release with a throwaway key; slow (a release build).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"

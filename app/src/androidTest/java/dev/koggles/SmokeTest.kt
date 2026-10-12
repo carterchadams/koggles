@@ -14,7 +14,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Blueprint Task 21: end-to-end smoke over the real app with [FakeAudio] driving the audio. */
+/** End-to-end smoke over the real app with [FakeAudio] driving the audio. */
 @RunWith(AndroidJUnit4::class)
 class SmokeTest {
     private val commands get() = AppGraph.renderCommands

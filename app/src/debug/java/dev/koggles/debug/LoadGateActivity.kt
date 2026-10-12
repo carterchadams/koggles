@@ -19,7 +19,7 @@ import java.io.File
 import kotlin.concurrent.thread
 
 /**
- * Debug-only rendering-load gate (G4). Extras: `goggles` (Boolean), `collision` (Boolean).
+ * Debug-only rendering-load gate: a fixed workload for measuring frame times on real hardware. Extras: `goggles` (Boolean), `collision` (Boolean).
  * Normal mode cycles the asset paths in `filesDir/g4/g4-presets.txt` every 15 s with soft
  * blends and logs frame stats every 10 s (tag KogglesG4). Collision mode blends between
  * `filesDir/g4/packA/a.milk` and `packB/b.milk`, each with its own texture search path.
@@ -51,7 +51,7 @@ class LoadGateActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        // Same immersive window as MainActivity, so G4 measures the app's real surface size.
+        // Same immersive window as MainActivity, so the gate measures the app's real surface size.
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -65,7 +65,7 @@ class LoadGateActivity : Activity() {
             if (intent.getBooleanExtra("collision", false)) runCollision() else runCycle(goggles)
         } catch (e: java.io.IOException) {
             // Inputs live in filesDir/g4 (adb-pushed files under Android/data are unreadable on API 37);
-            // see docs/verification/G4-rendering.md for the setup commands.
+            // push them with `adb push ... /data/local/tmp` then `run-as dev.koggles cp` into files/g4.
             Log.e(TAG, "missing G4 inputs in ${File(filesDir, "g4")}: ${e.message}")
             finish()
         }
@@ -96,7 +96,7 @@ class LoadGateActivity : Activity() {
                 }
                 val texturePaths = listOf(bundledTextures.absolutePath)
                 if (AppGraph.audio.snapshot.value.state != dev.koggles.audio.AudioState.Active) {
-                    // Without device audio the workload is lighter than G4 requires.
+                    // Without device audio the presets' audio-reactive work is missing, so the load is lighter than the gate is meant to measure.
                     Log.e(TAG, "invalid gate: audio not active (${AppGraph.audio.snapshot.value.state}); grant RECORD_AUDIO and play music")
                     active = false
                     main.removeCallbacksAndMessages(null)

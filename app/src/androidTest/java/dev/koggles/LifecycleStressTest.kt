@@ -27,7 +27,7 @@ class LifecycleStressTest {
     private val commands get() = AppGraph.renderCommands
 
     /**
-     * These tests check that one preset survives lifecycle churn. Real playback (Task 19) would
+     * These tests check that one preset survives lifecycle churn. Real playback would
      * auto-advance mid-test, so hold it: lock (stops projectM's timed switches) and wait out any
      * interstitial (its own timer advances it even when locked).
      */

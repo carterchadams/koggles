@@ -17,8 +17,10 @@ object RealInstallerFs : InstallerFs {
 
 /**
  * Extracts the bundled textures (`assets/textures/`, flat) into
- * `filesDir/bundled-textures/v<versionKey>/` following spec §5.1. [versionKey] is
- * `PackageInfo.lastUpdateTime` (D2). Not thread-safe; run once, off the main thread.
+ * `filesDir/bundled-textures/v<versionKey>/`, so an app update installs fresh textures and the old
+ * directory can be evicted. [versionKey] is `PackageInfo.lastUpdateTime`, not `versionCode`: debug
+ * reinstalls keep the same `versionCode`, so changed textures would never be picked up. Not
+ * thread-safe; run once, off the main thread.
  */
 class TextureInstaller(
     private val src: AssetSource,

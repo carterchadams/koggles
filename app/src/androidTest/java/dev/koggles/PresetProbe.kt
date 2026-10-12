@@ -13,7 +13,8 @@ import java.util.concurrent.ConcurrentHashMap
  * substitutes the default composite shader) without reporting a failed load.
  *
  * Its loads bypass the playback controller with ids above the controller's; playback takes control
- * back afterwards (plans/REQUEST-ID-FIX.md), so later tests that need real playback are unaffected.
+ * back afterwards (its ids never fall below the renderer's current request), so later tests that
+ * need real playback are unaffected.
  */
 class PresetProbe private constructor(private val textures: List<String>) : AutoCloseable {
 
@@ -82,7 +83,7 @@ class PresetProbe private constructor(private val textures: List<String>) : Auto
                     s == AudioState.Active && AppGraph.renderCommands.attachedHandle != 0L
                 }) { "app not ready" }
                 check(waitFor(30_000) { AppGraph.libraryRepo.state.value.bundledTextureDir != null }) { "textures not ready" }
-                // Playback's own loads now outrank loads from elsewhere (plans/REQUEST-ID-FIX.md): its startup or
+                // Playback's own loads outrank loads from elsewhere (it allocates ids above the renderer's): its startup or
                 // an interstitial ending would supersede a probe load in flight. Wait until it is idle (latest
                 // load applied, no interstitial pending); the probing tests lock playback, so nothing new starts.
                 check(waitFor(30_000) {

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Parses `apksigner verify --verbose --print-certs` output (plans/RELEASE-HARDENING.md, Task R3).
+# Parses `apksigner verify --verbose --print-certs` output (--verbose is required: the scheme lines
+# are not printed without it).
 #   parse-signer.sh <apksigner-output-file> <apksigner-exit-code> <expectedCertSha256>
 # Prints "PASS|FAIL 1 signature" and "PASS|FAIL 2 cert-pin"; exits 0 only if both pass.
 set -uo pipefail

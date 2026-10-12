@@ -1,4 +1,4 @@
-# Build and test on every push and pull request (plans/RELEASE-HARDENING.md, Task R6).
+# Build and test on every push and pull request.
 # No secrets; the instrumented suite stays a local gate (it needs a stable emulator).
 name: ci
 

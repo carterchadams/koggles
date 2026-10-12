@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Tests tools/ci/verify-release-apk.sh: the signed release passes 8/8, and each check fails on a
-# real input built to break exactly it (plans/RELEASE-HARDENING.md, Task R3; content per
-# plans/PRESET-PACK-CLASSIC.md).
+# real input built to break exactly it, so a check can't pass by accident.
 #   test-verify-release-apk.sh <signed-release.apk> <mapping.txt> <versionName> <versionCode> <cert> <debug.apk> <no-keep-rules.apk>
 # Static-only mode (CI without device artifacts): test-verify-release-apk.sh --fixtures
 set -uo pipefail
@@ -42,7 +41,8 @@ if [ "${1:-}" != "--fixtures" ]; then
   expect no-keep-rules "FAIL 6 jni-upcalls"  "$v" "$norules" "$map" "$name" "$code" "$cert"
   expect debuggable    "FAIL 7 not-debuggable" "$v" "$debug" "$map" "$name" "$code" "$cert"
   expect too-big       "FAIL 8 size"         env MAX_APK_MB=1 "$v" "$apk" "$map" "$name" "$code" "$cert"
-  # Content is exactly the hash-pinned allowlist (plans/PRESET-PACK-CLASSIC.md, PP4). Each mutation is
+  # Content is exactly the hash-pinned allowlist: one preset missing, one extra and one with changed
+  # bytes must each fail on the content check alone. Each mutation is
   # re-signed with a throwaway key whose cert is passed in, so only check 5 can fail.
   bt="${BUILD_TOOLS:-${ANDROID_HOME:-/missing-android-home}/build-tools/36.0.0}"
   rs_pw='koggles-verifier-test'

@@ -24,7 +24,7 @@ fun AudioErrorScreen(
                 "Switch to High quality",
                 onSwitchToHighQuality,
             )
-            // D2: another app holds the output-mix Visualizer; retries run automatically.
+            // Another app holds the output-mix Visualizer; retries run automatically, so no Try-again button.
             FailReason.VisualizerBusy -> MessageScreen(
                 "Another app is using the audio visualizer. Koggles will start as soon as it's free.",
                 "Switch to High quality",

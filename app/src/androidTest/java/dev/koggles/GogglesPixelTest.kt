@@ -18,8 +18,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Field report 1, P3: goggles mode must put real pixels in both eyes, with no GL error from the
- * eye copy. Measured per frame on the GL thread, over many frames (never one screenshot).
+ * Goggles mode must put real pixels in both eyes, with no GL error from the eye copy (on a Samsung
+ * phone the eye copy failed under ANGLE and both eyes stayed black, while the emulator's SwiftShader
+ * tolerated it). Measured per frame on the GL thread, over many frames (never one screenshot).
  */
 @RunWith(AndroidJUnit4::class)
 class GogglesPixelTest {

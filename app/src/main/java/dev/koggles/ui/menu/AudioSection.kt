@@ -13,10 +13,10 @@ import dev.koggles.audio.AudioSnapshot
 import dev.koggles.audio.AudioState
 import dev.koggles.audio.Source
 
-/** Spec §4 copy for the High quality caveat. */
+/** Fixed user-visible copy for the High quality caveat. */
 const val HQ_CAVEAT = "Higher fidelity; some apps block it and it asks again after locking"
 
-/** Spec §7 copy for prolonged silence. */
+/** Fixed user-visible copy for prolonged silence. */
 const val SILENCE_HINT = "No audio detected — some apps block capture"
 
 internal fun LazyListScope.audioSection(snapshot: AudioSnapshot, silence: Boolean, actions: MenuActions) {

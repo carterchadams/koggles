@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds the corresponding-source archive for a release (plans/RELEASE-HARDENING.md, D6/RH5):
+# Builds the corresponding-source archive for a release. libprojectM is LGPL-2.1 and GitHub's automatic
+# source archives omit submodule contents, so the release ships its own:
 # the tree at <ref> plus every submodule (recursively) at its pinned commit, and the pinned
 # bundled-content SHAs. Checks the archive holds projectM's sources and the app build.
 #   source-archive.sh <ref> <out.tar.gz>

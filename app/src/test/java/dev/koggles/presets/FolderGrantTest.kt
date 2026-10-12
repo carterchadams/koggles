@@ -28,14 +28,14 @@ class FolderGrantTest {
         assertEquals("content://ok", GrantRules.pick(two) { it == "content://ok" })
     }
 
-    // R2.2 gate: a grant whose release failed must not shadow the folder the user chose last.
+    // A grant whose release failed must not shadow the folder the user chose last.
     @Test
     fun pickPrefersActiveUri_evenWhenListedSecond() {
         val grants = listOf(PersistedGrant("content://old", read = true), PersistedGrant("content://new", read = true))
         assertEquals("content://new", GrantRules.pick(grants, active = "content://new") { true })
     }
 
-    // R2.2 gate 3: once a folder was chosen, only that folder counts. A leftover grant must not
+    // Once a folder was chosen, only that folder counts. A leftover grant must not
     // mask its loss (revalidation would keep a dead catalog) or resurrect an old folder.
     @Test
     fun pickActiveUnusable_returnsNull_evenWithLeftoverGrant() {

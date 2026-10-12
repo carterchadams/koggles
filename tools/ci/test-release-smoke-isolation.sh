@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Preset plan P3 (PP2, PP5): a smoke run of a suffixed release build must launch and PASS without
+# A smoke run of a suffixed release build must launch and PASS without
 # touching the installed dev.koggles app. A shim adb passes every command through except state
 # changes aimed at exactly dev.koggles, which it blocks and logs.
 #   test-release-smoke-isolation.sh <suffixed-release.apk> <its-package>

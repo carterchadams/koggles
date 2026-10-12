@@ -34,8 +34,9 @@ data class LibraryState(
  * Owns the preset catalog: bundled presets (from assets) plus user packs (from the folder grant),
  * the bundled texture install, and per-pack texture mirrors.
  *
- * Readiness (F4): [LibraryState.bundledReady] turns true only once bundled indexing is done AND the
- * texture install has settled (an existing directory, or a recorded failure).
+ * Readiness: [LibraryState.bundledReady] turns true only once bundled indexing is done AND the
+ * texture install has settled (an existing directory, or a recorded failure), so the first preset
+ * never loads without its textures.
  */
 class LibraryRepository(
     private val scope: CoroutineScope,
@@ -77,7 +78,7 @@ class LibraryRepository(
     }
 
     /**
-     * Spec §7: re-checks a published folder grant without re-indexing. If the folder is gone or
+     * Re-checks a published folder grant without re-indexing. If the folder is gone or
      * access was revoked, user packs are hidden in one update and bundled playback continues.
      * Safe against races: the result of a probe that a refresh or new grant has since superseded
      * is discarded, and the in-flight user index is cancelled under a new generation so it can
@@ -117,7 +118,8 @@ class LibraryRepository(
     /**
      * [packId]'s mirrored texture dir, then the bundled dir (existing only). If any of a user pack's
      * textures is missing — evicted directory or file, or an earlier failed copy — the mirror is
-     * re-applied first (spec §5.2), unless a newer index has superseded this state.
+     * re-applied first (the cache directory may have been evicted), unless a newer index has superseded
+     * this state.
      */
     suspend fun texturePathsFor(packId: String): List<String> {
         val generation = publishedGeneration
@@ -156,8 +158,7 @@ class LibraryRepository(
         }
         bundledPacks = bundled
         bundledErrors = indexErrors + listOfNotNull(installError)
-        // Blueprint Task 19 Step 5 measures this: time from process start of the library to a
-        // ready bundled catalog.
+        // Startup metric, read from logcat: time from the library's creation to a ready bundled catalog.
         log("catalog-ready ms=${(System.nanoTime() - createdAtNs) / 1_000_000} presets=${bundled.sumOf { it.presets.size }}")
         _state.update {
             it.copy(
@@ -230,7 +231,7 @@ class LibraryRepository(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // The folder is gone, unreadable or revoked (spec §7): hide user packs, keep bundled.
+                // The folder is gone, unreadable or revoked: hide user packs, keep bundled playing.
                 val stillGranted = runCatching { userTree() != null }.getOrDefault(false)
                 userLock.withLock {
                     if (generation == userGeneration) {

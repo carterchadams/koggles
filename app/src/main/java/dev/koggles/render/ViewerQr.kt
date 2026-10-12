@@ -5,7 +5,7 @@ import android.content.Intent
 import dev.koggles.NativeBridge
 
 /**
- * Viewer-profile QR scanning. Launched from Kotlin with an Activity (revised D5): the SDK's own
+ * Viewer-profile QR scanning. Launched from Kotlin with an Activity: the SDK's own
  * launcher calls startActivity on its process-wide context, which is not an Activity.
  */
 object ViewerQr {

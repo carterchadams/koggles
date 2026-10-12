@@ -1,4 +1,5 @@
-# Signed release on a vX.Y.Z tag (plans/RELEASE-HARDENING.md, Task R5).
+# Signed release on a vX.Y.Z tag. Three jobs, so the signing secrets never share a job with
+# untrusted tooling (emulator, downloaded tools) or with the write token:
 #   sign    — the only job with signing secrets (Environment "release": reviewer + v*/main refs)
 #   verify  — no secrets: host tests, static APK checks, emulator smoke, source archive
 #   publish — the only write token; tag pushes only (a dispatch is a dry run and never publishes)

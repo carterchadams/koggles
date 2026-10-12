@@ -1,6 +1,6 @@
 package dev.koggles.settings
 
-/** Which presets rotation draws from (spec §5.3). Persisted as a short string via [encode]. */
+/** Which presets rotation draws from. Persisted as a short string via [encode]. */
 sealed interface Scope {
     data object AllEnabled : Scope
     data object Favorites : Scope

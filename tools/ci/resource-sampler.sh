@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Samples free disk every 5 s in the background (plans/RELEASE-HARDENING.md, RC3).
+# Samples free disk every 5 s in the background, so a release job that dies from a full runner disk
+# (emulator images plus a release build) leaves evidence of it.
 #   resource-sampler.sh start <file>   # appends "<epoch> <free-MB-on-/> <free-MB-on-workspace>"
 #   resource-sampler.sh stop  <file>   # stops it and prints "min free MB: N"
 set -euo pipefail

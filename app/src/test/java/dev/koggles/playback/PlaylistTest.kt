@@ -90,7 +90,7 @@ class PlaylistTest {
         assertEquals(setOf("bundled:a/a1.milk", "user:b/b0.milk"), p.reachable())
     }
 
-    // Spec §7: a scope naming a pack that disappeared (grant lost) falls back to bundled playback.
+    // A scope naming a pack that disappeared (grant lost) falls back to bundled playback instead of idling.
     @Test fun packScope_packGone_playsAllEnabled() {
         val cat = catalogOf(pack("bundled:a", "a0.milk", "a1.milk"))
         val p = playlist(cat) { it.copy(scope = Scope.PackOnly("user:b")) }
@@ -391,9 +391,9 @@ class PlaylistTest {
         assertEquals(keysOf(cat)[3], p.current?.key)
     }
 
-    // ---- Request ids (plans/REQUEST-ID-FIX.md) ----
+    // ---- Request ids: never below the renderer's current request, whoever loaded it ----
 
-    /** Q1: ids never fall below the renderer's current request, whoever loaded it. */
+    /** Ids never fall below the renderer's current request, whoever loaded it. */
     @Test fun ids_neverFallBelowTheFloor() {
         var floor = 0L
         val p = Playlist(Random(42)) { floor }.also { it.update(inputs(flatCatalog(5))) }
@@ -404,7 +404,7 @@ class PlaylistTest {
         assertEquals(second + 1, p.next().requestId) // consecutive again afterwards
     }
 
-    /** PQ1: a reissue keeps target, kind and the pending interstitial, under a new id above the floor. */
+    /** A reissue keeps target, kind and the pending interstitial, under a new id above the floor. */
     @Test fun reissueLatest_keepsTargetKindAndPendingInterstitial() {
         var floor = 0L
         val p = Playlist(Random(42)) { floor }.also { it.update(inputs(mixed).copy(interstitials = true)) }
@@ -422,7 +422,7 @@ class PlaylistTest {
         assertFalse(presetKey(d) in transitions)
     }
 
-    /** PQ1: a reissued history step keeps the history walk (no duplicate entry). */
+    /** A reissued history step keeps the history walk (no duplicate entry). */
     @Test fun reissueLatest_keepsHistoryNavigation() {
         var floor = 0L
         val p = Playlist(Random(42)) { floor }.also { it.update(inputs(flatCatalog(5))) }

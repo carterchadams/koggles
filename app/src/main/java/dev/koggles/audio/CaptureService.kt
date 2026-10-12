@@ -32,7 +32,7 @@ class CaptureService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val generation = intent?.getLongExtra(EXTRA_GENERATION, -1L) ?: -1L
         // One capture per instance: tear down the previous one; its callbacks carry its old
-        // generation and are dropped by CaptureBus (F3).
+        // generation and are dropped by CaptureBus, so they can't disturb the new capture.
         capture?.close()
         capture = null
         try {

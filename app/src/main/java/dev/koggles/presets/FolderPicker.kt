@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Handles a folder picked in the system tree picker (spec §5.1). Taking the grant is provider IPC,
+ * Handles a folder picked in the system tree picker. Taking the grant is provider IPC,
  * so it runs on [io]; a failure is reported through [onFailed] (the library shows it) instead of
  * crashing, and only a successful acquisition triggers [onAcquired] (a re-index).
  */

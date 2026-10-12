@@ -19,7 +19,8 @@ object NativePcmSink : PcmSink {
 /**
  * Admits PCM only from the currently open source generation. [close] and [flush] share the
  * lock with every push, so once a source is closed and the window flushed, no write from that
- * source can land — even if its producer thread is still winding down (spec §3.1).
+ * source can land — even if its producer thread is still winding down, so a flushed native PCM
+ * window can't be refilled with stale audio.
  */
 open class PcmGate(private val sink: PcmSink) {
     private val lock = Any()

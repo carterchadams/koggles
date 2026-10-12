@@ -6,8 +6,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Whether the menu is open. Opening forces the single full-screen preview (spec §4) and tells the
- * audio machine to defer prompts (spec §6); closing reverses both. Main thread only.
+ * Whether the menu is open. Opening forces the single full-screen preview (the menu is unusable
+ * split across two eyes) and tells the audio machine to defer prompts (no system dialogs over the
+ * menu); closing reverses both. Main thread only.
  */
 class MenuState(
     private val setPreview: (Boolean) -> Unit,

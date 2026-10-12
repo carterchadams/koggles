@@ -101,7 +101,7 @@ object AppGraph {
 
     private val _silenceHint = MutableStateFlow(false)
 
-    /** Spec §7: true after 10 s of silence while audio is Active; false otherwise. */
+    /** True after 10 s of silence while audio is Active (the menu then hints that some apps block capture). */
     val silenceHint: StateFlow<Boolean> = _silenceHint.asStateFlow()
 
     /** Every PCM producer pushes through this gate, tagged with its source generation. */

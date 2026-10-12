@@ -15,13 +15,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Blueprint Task 19 Step 5 / roadmap R1.4, automated: with the default settings the real app
- * auto-advances every 30 s and plays `!` transition interstitials for about 4 s.
+ * With the default settings the real app auto-advances every 30 s and plays `!` transition
+ * interstitials for about 4 s.
  *
  * Timing is taken when each load is *issued* to the renderer (RenderCommands state), which is what
  * the playback logic controls. The time until the renderer acknowledges a load includes preset
  * compile time, which on the emulator's software GPU is seconds and varies per preset; it is logged
- * for information (a G4 performance concern), not asserted.
+ * for information (a rendering-load concern, measured separately), not asserted.
  */
 @RunWith(AndroidJUnit4::class)
 class AutoAdvanceTest {
@@ -99,9 +99,9 @@ class AutoAdvanceTest {
     }
 
     /**
-     * The auto-advance setting is a fixed interval (spec §4). projectM randomises each preset's
+     * The auto-advance setting is a fixed interval, not an average. projectM randomises each preset's
      * duration around the setting unless told not to (its "easter egg" sigma, default 1 s), which
-     * gave 27.45 s for "30 s" in one R3 run. Four consecutive advances at 15 s must each land within
+     * gave 27.45 s for "30 s" in one instrumented run. Four consecutive advances at 15 s must each land within
      * ±0.5 s; with the default sigma that happens ~2 % of the time.
      */
     @Test fun advanceInterval_isFixed_notRandomised() {
@@ -128,8 +128,8 @@ class AutoAdvanceTest {
     }
 
     /**
-     * Q4 (plans/REQUEST-ID-FIX.md): another loader (the debug G4 harness, a test probe, a future
-     * preview) can put its own preset on screen with a newer request id. Playback must take control
+     * Another loader (the debug load-gate harness, a test probe, a future preview) can put its own
+     * preset on screen with a newer request id. Playback must take control
      * back at the next switch request. It used to ignore every switch request carrying the foreign id,
      * and every load it issued below that id was superseded, so playback froze for the process.
      */
@@ -142,7 +142,7 @@ class AutoAdvanceTest {
                 assertTrue("no playback load at start", synchronized(loads) { loads.isNotEmpty() })
                 val data = AppGraph.app.assets.open("g1/ok.milk").bufferedReader().use { it.readText() }
                 val foreign = (AppGraph.renderCommands.state.value.preset?.requestId ?: 0L) + 1_000
-                AppGraph.renderCommands.loadPreset(data, foreign, false, emptyList()) // as the G4 harness does
+                AppGraph.renderCommands.loadPreset(data, foreign, false, emptyList()) // as the debug load-gate harness does
                 val deadline = SystemClock.elapsedRealtime() + 25_000 // one 15 s duration plus margin
                 while (SystemClock.elapsedRealtime() < deadline && synchronized(loads) { loads.none { it.requestId > foreign } }) {
                     Thread.sleep(250)

@@ -31,7 +31,7 @@ class GrantRulesTest {
         assertEquals(listOf("b"), released)
     }
 
-    // R2.2 gate 4: the choice must be durably recorded before anything is released.
+    // The choice must be durably recorded before anything is released, or a crash in between loses the folder.
     @Test fun recordFails_undoesNewGrant_releasesNothing_throws() {
         val events = mutableListOf<String>()
         assertThrows(IOException::class.java) {

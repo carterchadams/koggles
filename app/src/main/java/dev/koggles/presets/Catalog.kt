@@ -1,7 +1,8 @@
 package dev.koggles.presets
 
 /**
- * One `.milk` file inside a pack. [key] is `"$packId/$relPath"` (spec §5.1); [relPath] uses `/`
+ * One `.milk` file inside a pack. [key] is `"$packId/$relPath"`, stable across re-indexing so marks
+ * and the last-played key survive restarts; [relPath] uses `/`
  * separators. [folder] is the parent of [relPath] (`""` at the pack root) and [name] the file
  * name without its extension. [isTransition]: some segment of [relPath] starts with `!`.
  */

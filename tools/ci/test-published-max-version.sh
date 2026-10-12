@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests tools/ci/published-max-version.sh against a fake `gh` (plans/RELEASE-HARDENING.md, RH6):
+# Tests tools/ci/published-max-version.sh against a fake `gh` (it guards version ordering across releases):
 # versionCodes come from the published tag names (canonical vX.Y.Z), never from release notes;
 # it must fail closed on any query failure or non-version tag, never report 0 by accident.
 set -uo pipefail

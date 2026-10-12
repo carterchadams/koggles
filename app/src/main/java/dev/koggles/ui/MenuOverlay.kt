@@ -52,8 +52,9 @@ data class MenuModel(
 )
 
 /**
- * Spec §4 menu: a flat panel over a dimmed single preview. Touches never reach the visualization;
- * the title bar's X or Back closes it (D1: double tap no longer does).
+ * The menu: a flat panel over a dimmed single preview. Touches never reach the visualization;
+ * the title bar's X or Back closes it. Double tap only opens it, so an accidental double tap
+ * can't dismiss settings.
  */
 @Composable
 fun MenuOverlay(model: MenuModel, actions: MenuActions, highlightChooseFolder: Boolean, onClose: () -> Unit) {

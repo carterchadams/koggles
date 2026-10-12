@@ -8,7 +8,7 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * Blueprint Task 21: a test audio source. A 220 Hz sine, amplitude-modulated at 2 Hz, pushed
+ * A test audio source. A 220 Hz sine, amplitude-modulated at 2 Hz, pushed
  * through `pushPcmFloat` from its own thread; the audio state reaches `Active` through the
  * [AppGraph.overrideAudioForTest] source factory. Install before launching the activity.
  */

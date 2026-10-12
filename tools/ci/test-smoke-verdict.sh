@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests tools/ci/smoke-verdict.py against log fixtures (plans/RELEASE-HARDENING.md, Task R1).
+# Tests tools/ci/smoke-verdict.py against log fixtures: a PASS needs the full id-matched upcall
+# sequence, and crashes, missing upcalls or an incomplete log must never pass.
 #   exit codes: 0 pass, 1 fail, 2 not yet
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

@@ -21,8 +21,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Field report 1, P4: another client holding the output-mix Visualizer enabled makes Koggles'
- * setup fail. Koggles must say the visualizer is busy (never "unsupported") and start by itself
+ * Another client holding the output-mix Visualizer enabled makes Koggles' setup fail (seen in the
+ * field with another visualizer app running). Koggles must say the visualizer is busy (never "unsupported") and start by itself
  * once the holder lets go, including after a background/foreground cycle.
  */
 @RunWith(AndroidJUnit4::class)

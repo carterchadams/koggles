@@ -18,7 +18,7 @@ interface AudioSourceListener {
 /** The MediaProjection consent result handed to the High-quality source. */
 data class ConsentData(val resultCode: Int, val data: Intent)
 
-/** Creates the source for [source]; [generation] identifies this start (F3). */
+/** Creates the source for [source]; [generation] identifies this start so late callbacks from an older start can be dropped. */
 fun interface SourceFactory {
     fun create(source: Source, consent: ConsentData?, generation: Long): AudioSource
 }

@@ -172,7 +172,7 @@ class AudioMachineTest {
         assertTrue(s.hasPermission)
     }
 
-    // Spec §7: no High-quality path while RECORD_AUDIO is denied.
+    // No High-quality path while RECORD_AUDIO is denied: it needs the permission.
     @Test
     fun permissionDenied_neverStartsHighQuality() {
         val denied = visible(AudioState.PermissionDenied(false), hasPermission = false)
@@ -412,7 +412,7 @@ class AudioMachineTest {
         assertEquals(listOf(AudioEffect.StopSource, AudioEffect.FlushAudio), effects)
     }
 
-    // ---- Field report 1, P4: a Visualizer held by another app is "busy" and retried. ----
+    // ---- A Visualizer held by another app is "busy" and retried, never "unsupported". ----
 
     private val busy = AudioState.Failed(FailReason.VisualizerBusy)
 

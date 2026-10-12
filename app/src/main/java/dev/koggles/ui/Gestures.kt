@@ -12,7 +12,7 @@ import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
 
 /**
- * Spec §4 gestures over the visualization: a confirmed single tap (after the double-tap timeout)
+ * Gestures over the visualization: a confirmed single tap (after the double-tap timeout)
  * and a double tap. Consumes every touch it receives.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -45,6 +45,7 @@ fun Modifier.visualizerGestures(
  * Makes an overlay opaque to touches by hit-testing alone: this node is hit, so siblings beneath it
  * (the visualization's gestures) never receive the touch. It consumes nothing, so children's
  * drags and taps work normally. Consuming here instead cancels slow drags before they pass touch
- * slop (docs/diagnosis/2026-10-11-field-report-1-diagnosis.md, P1).
+ * slop: Compose's drag detector cancels a drag if anything consumed a pre-slop move, which made the
+ * menu lists nearly impossible to scroll slowly.
  */
 fun Modifier.blockTouchesBelow(): Modifier = pointerInput(Unit) {}

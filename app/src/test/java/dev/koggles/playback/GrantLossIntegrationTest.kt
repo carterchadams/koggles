@@ -35,7 +35,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * R2.3/R2.4: the user folder disappears during playback. Real [LibraryRepository], [PlaybackController]
+ * The user folder disappears during playback. Real [LibraryRepository], [PlaybackController]
  * and [Playlist]; the grant probe takes 500 ms of virtual time. Playback must make positive progress
  * on bundled presets (acknowledged loads), never idle.
  */

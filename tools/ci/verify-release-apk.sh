@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Static verification of a release APK (plans/RELEASE-HARDENING.md, Task R3).
+# Static verification of a release APK before it is published: signature and pinned cert, version,
+# native libs, bundled content, JNI upcalls surviving R8, not debuggable, size.
 #   verify-release-apk.sh <apk> <mapping.txt> <versionName> <versionCode> <certSha256>
 # Prints "PASS n <check>" / "FAIL n <check>: <why>" per check; exits 0 only if all 8 pass.
 # Env: MAX_APK_MB (default 15), ALLOWLIST (default app/bundled-presets.txt), BUILD_TOOLS (default
@@ -46,7 +47,7 @@ for lib in libkoggles.so libprojectM-4.so libGfxPluginCardboard.so libc++_shared
 done
 if [ -z "$missing" ]; then ok 4 native-libs; else bad 4 native-libs "missing$missing"; fi
 # 5 content and licences: the bundled presets are exactly the hash-pinned allowlist (one flat folder,
-# same names, same SHA-256; plans/PRESET-PACK-CLASSIC.md), and the licence files are present.
+# same names, same SHA-256, so a same-name file with other bytes fails), and the licence files are present.
 allowlist="${ALLOWLIST:-$here/../../app/bundled-presets.txt}"
 transitions="${TRANSITIONS_ALLOWLIST:-$here/../../app/bundled-transitions.txt}"
 content="$(python3 - "$apk" "$allowlist" "$transitions" <<'PY' 2>&1

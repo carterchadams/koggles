@@ -131,7 +131,7 @@ class LibraryRepositoryTest {
         assertEquals(dir.absolutePath, paths[0])
     }
 
-    // ---- R2.3: live grant-loss recovery ----
+    // ---- Live grant-loss recovery ----
 
     @Test fun revalidate_lostGrant_hidesUserPacksKeepsBundled() {
         var tree: DocTree? = user

@@ -272,7 +272,7 @@ class PlaybackControllerTest {
     }
 
     /**
-     * Q6 / PQ1: our load is pending (read in flight) when a higher-id foreign load is accepted and
+     * Our load is pending (read in flight) when a higher-id foreign load is accepted and
      * fails. Our pending load is then superseded and the renderer keeps showing our older preset, whose
      * switch callbacks are stale. Playback must still recover, reloading our latest target above the
      * foreign id, without manual navigation.
@@ -294,7 +294,7 @@ class PlaybackControllerTest {
         assertTrue("reloaded above $foreign: ${sink.calls}", idOf(last) > foreign)
     }
 
-    /** Q2 (plans/REQUEST-ID-FIX.md): a newer id on screen came from another loader; take control back. */
+    /** A newer id on screen came from another loader; take control back instead of freezing. */
     @Test fun switchRequestForAForeignPreset_takesControlAndAdvances() = runTest {
         val c = controller(); c.start(); advanceUntilIdle()
         c.onSwitchRequested(false, c.nowPlayingRequestId() + 1_000); advanceUntilIdle()

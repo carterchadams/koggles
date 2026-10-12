@@ -16,7 +16,9 @@ class AndroidAssetSource(private val assets: AssetManager) : AssetSource {
 }
 
 /**
- * Read-only tree over APK assets under [rootPath] (D1: bundled presets are never extracted).
+ * Read-only tree over APK assets under [rootPath]. Bundled presets are read straight from the APK,
+ * never extracted: extracting thousands of files would duplicate them and delay first run, and
+ * projectM needs real files only for textures.
  * Node ids are asset paths. Sizes and timestamps are unknown (0): `AssetManager` can't report
  * them without opening each file.
  */

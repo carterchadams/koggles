@@ -59,7 +59,7 @@ object GrantRules {
     }
 }
 
-/** The single user folder grant (spec §5.1, user packs). */
+/** The single user folder grant (the one folder whose subfolders become user packs). */
 class FolderGrant(context: Context) {
 
     private val resolver = context.applicationContext.contentResolver
@@ -84,7 +84,7 @@ class FolderGrant(context: Context) {
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         .putExtra(
             DocumentsContract.EXTRA_INITIAL_URI,
-            // Spec §5.1: open the picker at Documents (a hint only).
+            // Open the picker at Documents (a hint only; the provider may ignore it).
             DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Documents"),
         )
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests tools/ci/version-from-tag.sh (plans/RELEASE-HARDENING.md, Task R2).
+# Tests tools/ci/version-from-tag.sh: canonical vX.Y.Z tags map to versionCodes, and aliases such as
+# v01.02.03 (which would collide) or out-of-range parts are rejected.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 pass=0; fail=0

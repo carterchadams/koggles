@@ -32,7 +32,8 @@ data class MirrorPlan(
 
 /**
  * Mirrors a pack's textures, flattened by file name, into `cacheRoot/textures/<sha1(packId)>/`
- * (spec §5.2). [copy] writes a source node's bytes to a file and throws on failure. [log]
+ * (projectM needs textures as real files in one search path). [copy] writes a source node's bytes
+ * to a file and throws on failure. [log]
  * receives one line per collision. Not thread-safe; run off the main thread.
  */
 class TextureMirror(

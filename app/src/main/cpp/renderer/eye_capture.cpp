@@ -8,7 +8,8 @@ void EyeCapture::begin(int eyeW, int eyeH) {
         glBindTexture(GL_TEXTURE_2D, texture_);
         // RGB, not RGBA: ES 3.0 glCopyTexSubImage2D fails with GL_INVALID_OPERATION when the
         // destination has components the source framebuffer lacks, and GLSurfaceView's default
-        // EGL config has no alpha. ANGLE enforces this; SwiftShader does not (field report 1, P3).
+        // EGL config has no alpha. ANGLE (Samsung) enforces this and left both eyes black; the
+        // emulator's SwiftShader does not.
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, eyeW, eyeH, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);

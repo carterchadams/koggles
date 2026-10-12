@@ -52,7 +52,9 @@ class PresetCallbackTest {
     @Test fun failureDetectedOnFirstFrame_reportsFailed() {
         ActivityScenario.launch(MainActivity::class.java).use {
             val id = nextId()
-            // Over projectM's 1 MiB preset limit: a real load failure (shader errors never report; G1 P2).
+            // Over projectM's 1 MiB preset limit: a real load failure. A broken shader never reports one;
+            // projectM silently falls back to its default shader, so only unreadable, oversized or
+            // binary data fails a load.
             val oversized = okData + "\n" + "// pad\n".repeat(200_000)
             AppGraph.renderCommands.loadPreset(oversized, id, false, emptyList())
             assertNotNull(awaitEvent("failed:$id"))

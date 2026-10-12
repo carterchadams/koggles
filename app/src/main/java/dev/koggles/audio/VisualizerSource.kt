@@ -43,7 +43,8 @@ class AndroidVisualizer : VisualizerApi {
  * "Standard" source: the output mix via [Visualizer] waveform capture. Reports started only
  * after every setup call succeeds. Another client holding session 0 shows up as an
  * IllegalStateException or ERROR_INVALID_OPERATION from a setup call: that is
- * [FailReason.VisualizerBusy], never "unavailable" (field report 1, P4). Every failure logs each
+ * [FailReason.VisualizerBusy], never "unavailable" (it was once misreported as the phone not
+ * sharing its audio at all, when another visualizer app merely held the session). Every failure logs each
  * call made and its result; retries belong to the audio machine, never here.
  */
 class VisualizerSource(

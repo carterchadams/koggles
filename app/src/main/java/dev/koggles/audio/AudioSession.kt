@@ -16,7 +16,8 @@ import kotlinx.coroutines.launch
  * effects to the activity through [uiEffects]. [dispatch] is called on the main thread.
  *
  * Every source start gets a fresh generation; callbacks from a superseded source are dropped
- * before they reach the reducer (F3), and its PCM is shut out by [PcmGate] before any flush.
+ * before they reach the reducer (a late callback from a stopped source must not change state), and
+ * its PCM is shut out by [PcmGate] before any flush.
  */
 class AudioSession(
     private val factory: SourceFactory,

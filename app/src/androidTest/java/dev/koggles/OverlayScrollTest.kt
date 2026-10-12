@@ -37,7 +37,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The list's own reported scroll position (field report 1 diagnosis: never screen dumps). */
+/** The list's own reported scroll position; screen dumps proved unreliable for measuring scroll. */
 fun ComposeTestRule.scrollPosition(tag: String): Float =
     onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
 
@@ -51,8 +51,9 @@ fun SemanticsNodeInteraction.slowSwipeUp(start: Offset? = null) = performTouchIn
 }
 
 /**
- * Field report 1, P1: slow drags must scroll every overlay list from any start point, and no
- * overlay may let a tap or double tap through to the visualization.
+ * Slow drags must scroll every overlay list from any start point (a modifier that consumed every
+ * pointer change used to cancel slow drags before touch slop), and no overlay may let a tap or
+ * double tap through to the visualization.
  */
 @RunWith(AndroidJUnit4::class)
 class OverlayScrollTest {
