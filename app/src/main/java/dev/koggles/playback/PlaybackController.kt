@@ -201,12 +201,16 @@ class PlaybackController(
         hardCutPending = false
         val id = r.requestId
         fun fresh() = id == playlist.latestRequestId
+        // Provider operations are keyed by the catalog they were issued against: a preset key names
+        // a pack and path, not a tree, so after a folder replacement the same key must not join a
+        // read still stalled on the old tree.
+        val source = System.identityHashCode(libraryState.value.catalog)
         loadJob = scope.launch {
             when (val target = r.target) {
                 Target.Idle -> if (fresh()) sink.loadIdle(id)
                 is Target.Preset -> {
                     val data = try {
-                        bounded("read:${target.ref.key}") { reader.read(target.ref) }
+                        bounded("read:$source:${target.ref.key}") { reader.read(target.ref) }
                             ?: throw IOException("preset read timed out or no capacity")
                     } catch (e: CancellationException) {
                         throw e
@@ -224,7 +228,7 @@ class PlaybackController(
                         return@launch
                     }
                     if (!fresh()) return@launch
-                    val paths = bounded("textures:${target.ref.packId}") { texturePaths(target.ref.packId) }
+                    val paths = bounded("textures:$source:${target.ref.packId}") { texturePaths(target.ref.packId) }
                     if (paths == null) {
                         if (fresh()) playlist.onLoadFailed(id)?.let(::process)
                         return@launch
@@ -248,7 +252,8 @@ class PlaybackController(
      * playback: timer events for the preset still on screen are dropped as stale while the new one
      * never arrives. The wait is abandoned, never the work: cancellation can't interrupt a blocking
      * content-provider read, and cancelling a folder revalidation mid-way would leave the library
-     * half updated. Work can't pile up either: the same key joins the operation already running, and
+     * half updated. Work can't pile up either: the same key (operation, source catalog, target)
+     * joins the operation already running, and
      * at most [MAX_DETACHED] distinct operations run at once, beyond which a load fails fast. A late
      * result is dropped, since only the current load job talks to the sink. Main thread only.
      */

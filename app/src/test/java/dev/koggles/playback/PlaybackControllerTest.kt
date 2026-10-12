@@ -81,11 +81,13 @@ class PlaybackControllerTest {
     @After fun releaseBlockedReads() = blockRelease.countDown()
 
     private val readCalls = HashMap<String, Int>()
+    /** Keys whose first read fails (after any gate); later reads of the same key succeed. */
+    private val failFirst = HashSet<String>()
     private val reader = PresetReader { ref: PresetRef ->
-        readCalls.merge(ref.key, 1, Int::plus)
+        val n = readCalls.merge(ref.key, 1, Int::plus)!!
         if (ref.key in blocking) withContext(Dispatchers.IO) { blockRelease.await() }
         gates[ref.key]?.await()
-        if (ref.key in failing) throw IOException("unreadable ${ref.key}")
+        if (ref.key in failing || (n == 1 && ref.key in failFirst)) throw IOException("unreadable ${ref.key}")
         "data:${ref.key}"
     }
     private val libState = MutableStateFlow(state(ready = true))
@@ -442,6 +444,27 @@ class PlaybackControllerTest {
         val supervisors = root.children.filterIsInstance<CompletableJob>().toList()
         assertEquals("exactly one detached-work supervisor", 1, supervisors.size)
         assertEquals("lingering detached jobs after successful loads", 0, supervisors.single().children.count())
+    }
+
+    /**
+     * Coalescing must not cross a folder replacement: the same pack/path in a new tree is a
+     * different read. Here the old tree's read is stalled, the folder is replaced, and the new
+     * preset is selected: it must get its own read, and the old read's late failure must not mark
+     * the healthy replacement broken.
+     */
+    @Test fun readsDoNotCoalesceAcrossACatalogReplacement() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val target = keys.first { it != loadedKey(sink.loads().single()) }
+        gates[target] = CompletableDeferred()
+        failFirst += target // the old tree's read will fail once released
+        c.select(target); runCurrent()
+        assertEquals(1, readCalls[target])
+        libState.value = state(ready = true, cat = flatCatalog(4)) // same keys, a replacement tree
+        runCurrent()
+        c.select(target); runCurrent()
+        assertEquals("a new tree gets its own read", 2, readCalls[target])
+        gates[target]!!.complete(Unit); advanceUntilIdle()
+        assertEquals(target, loadedKey(sink.loads().last()))
     }
 
     /** The interstitial's visible duration starts when it is on screen, not when its load was issued. */
