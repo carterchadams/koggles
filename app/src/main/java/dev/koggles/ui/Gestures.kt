@@ -42,11 +42,9 @@ fun Modifier.visualizerGestures(
 }
 
 /**
- * Makes an overlay opaque to touches: its own children still get them first, and whatever they
- * leave is consumed here, so nothing beneath the overlay (the visualization's gestures) reacts.
+ * Makes an overlay opaque to touches by hit-testing alone: this node is hit, so siblings beneath it
+ * (the visualization's gestures) never receive the touch. It consumes nothing, so children's
+ * drags and taps work normally. Consuming here instead cancels slow drags before they pass touch
+ * slop (docs/diagnosis/2026-10-11-field-report-1-diagnosis.md, P1).
  */
-fun Modifier.consumeAllTouches(): Modifier = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) awaitPointerEvent().changes.forEach { it.consume() }
-    }
-}
+fun Modifier.blockTouchesBelow(): Modifier = pointerInput(Unit) {}

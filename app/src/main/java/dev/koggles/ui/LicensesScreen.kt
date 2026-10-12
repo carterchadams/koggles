@@ -31,7 +31,7 @@ fun LicensesScreen(onClose: () -> Unit) {
     val assets = LocalContext.current.assets
     val files = remember { assets.list("licenses").orEmpty().sorted() }
     var openFile by remember { mutableStateOf<String?>(null) }
-    Surface(Modifier.fillMaxSize().testTag("licenses").consumeAllTouches()) {
+    Surface(Modifier.fillMaxSize().testTag("licenses").blockTouchesBelow()) {
         Column(Modifier.safeDrawingPadding().padding(16.dp)) {
             TextButton(onClick = onClose) { Text("Close") }
             Text("About & licenses", style = MaterialTheme.typography.titleLarge)
@@ -40,7 +40,7 @@ fun LicensesScreen(onClose: () -> Unit) {
                     "the Cream of the Crop presets and the Milkdrop texture pack.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
+            LazyColumn(Modifier.testTag("licenses-list"), contentPadding = PaddingValues(vertical = 8.dp)) {
                 items(files, key = { it }) { name ->
                     Column(Modifier.fillMaxWidth().clickable { openFile = if (openFile == name) null else name }) {
                         Text((if (openFile == name) "▾ " else "▸ ") + name, Modifier.padding(vertical = 8.dp))

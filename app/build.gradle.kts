@@ -1,3 +1,4 @@
+import java.util.Properties
 import java.io.File
 import java.io.OutputStream
 import javax.inject.Inject
@@ -136,8 +137,14 @@ android {
         applicationId = "dev.koggles"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Release CI passes both from the tag (tools/ci/version-from-tag.sh); local builds keep the defaults.
+        val tagVersionName = providers.gradleProperty("kogglesVersionName").orNull
+        val tagVersionCode = providers.gradleProperty("kogglesVersionCode").orNull
+        if ((tagVersionName == null) != (tagVersionCode == null)) {
+            throw GradleException("kogglesVersionName and kogglesVersionCode must be set together")
+        }
+        versionCode = tagVersionCode?.toInt() ?: 1
+        versionName = tagVersionName ?: "0.1.0"
         testInstrumentationRunner = "dev.koggles.KogglesTestRunner"
         ndk {
             abiFilters += "arm64-v8a"
@@ -156,8 +163,39 @@ android {
         }
     }
 
+    // Release signing (Blueprint Task 21). CI passes the credentials as environment variables
+    // (KOGGLES_KEYSTORE_FILE, KOGGLES_STORE_PASSWORD, KOGGLES_KEY_ALIAS, KOGGLES_KEY_PASSWORD), so they
+    // reach the signer unchanged; locally, keystore.properties at the repo root (never committed).
+    // With neither, the release APK is left unsigned (CI's release workflow refuses to run that way).
+    val envKeystore = providers.environmentVariable("KOGGLES_KEYSTORE_FILE").orNull
+    val keystoreProps = rootProject.file("keystore.properties")
+    val releaseSigning = when {
+        envKeystore != null -> signingConfigs.create("release") {
+            storeFile = file(envKeystore)
+            storePassword = providers.environmentVariable("KOGGLES_STORE_PASSWORD").orNull
+            keyAlias = providers.environmentVariable("KOGGLES_KEY_ALIAS").orNull
+            keyPassword = providers.environmentVariable("KOGGLES_KEY_PASSWORD").orNull
+        }
+        keystoreProps.isFile -> {
+            val props = Properties().apply { keystoreProps.inputStream().use { load(it) } }
+            signingConfigs.create("release") {
+                storeFile = rootProject.file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+        else -> {
+            logger.warn("keystore.properties not found: release APK is unsigned")
+            null
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = releaseSigning
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

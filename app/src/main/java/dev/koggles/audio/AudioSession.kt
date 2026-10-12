@@ -1,6 +1,8 @@
 package dev.koggles.audio
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,11 +36,23 @@ class AudioSession(
     private var current: AudioSource? = null
     private var generation = 0L
     private var pendingConsent: ConsentData? = null
+    private var retryJob: Job? = null
 
     fun dispatch(e: AudioEvent) {
-        val (next, effects) = reduce(_snapshot.value, e)
+        val previous = _snapshot.value
+        val (next, effects) = reduce(previous, e)
         _snapshot.value = next
+        // A scheduled retry belongs to the state that scheduled it.
+        if (next.state != previous.state) retryJob?.cancel()
         effects.forEach(::execute)
+    }
+
+    /**
+     * Instrumented tests only: replaces the snapshot without running any effect, so a test can put
+     * an overlay (explainer, error screen) on screen directly.
+     */
+    internal fun resetForTest(snapshot: AudioSnapshot) {
+        _snapshot.value = snapshot
     }
 
     /** Result of the consent request [requestId]; `null` means declined or cancelled. */
@@ -53,6 +67,13 @@ class AudioSession(
             AudioEffect.StopSource -> stopSource()
             AudioEffect.FlushAudio -> gate.flush()
             AudioEffect.MarkExplainerSeen -> scope.launch { explainerStore.markSeen() }
+            is AudioEffect.ScheduleRetry -> {
+                retryJob?.cancel()
+                retryJob = scope.launch {
+                    delay(effect.delayMs)
+                    dispatch(AudioEvent.Retry)
+                }
+            }
             AudioEffect.ShowExplainer,
             AudioEffect.RequestPermission,
             AudioEffect.OpenAppSettings,

@@ -184,7 +184,10 @@ class Playlist(private val random: Random) {
         val inp = inputs ?: return
         val enabled = inp.catalog.packs.filter { it.id !in inp.disabledPacks }.flatMap { it.presets }
         val excluded = { ref: PresetRef -> ref.key in inp.skipped || ref.key in pendingSkips || ref.key in broken }
-        val newCandidates = enabled.filter { !it.isTransition && inScope(it, inp) && !excluded(it) }
+        val playable = enabled.filter { !it.isTransition && !excluded(it) }
+        val scoped = playable.filter { inScope(it, inp) }
+        // Human decision Q1: a Favorites scope with nothing playable acts as the default scope.
+        val newCandidates = if (scoped.isEmpty() && inp.scope == Scope.Favorites) playable else scoped
         transitions = enabled.filter { it.isTransition && !excluded(it) }
         val oldKeys = candidateKeys
         candidates = newCandidates

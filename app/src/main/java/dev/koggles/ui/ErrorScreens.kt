@@ -24,6 +24,12 @@ fun AudioErrorScreen(
                 "Switch to High quality",
                 onSwitchToHighQuality,
             )
+            // D2: another app holds the output-mix Visualizer; retries run automatically.
+            FailReason.VisualizerBusy -> MessageScreen(
+                "Another app is using the audio visualizer. Koggles will start as soon as it's free.",
+                "Switch to High quality",
+                onSwitchToHighQuality,
+            )
             // High quality failures cover the menu: offer the way back to Standard here.
             FailReason.CaptureStartFailed ->
                 MessageScreen("Audio capture couldn't start.", "Try again", onRetry, STANDARD, onSwitchToStandard)

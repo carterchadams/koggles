@@ -36,10 +36,26 @@ void init(JNIEnv* e) {
     }
     gBridge = reinterpret_cast<jclass>(e->NewGlobalRef(local));
     e->DeleteLocalRef(local);
-    gSwitchRequested = e->GetStaticMethodID(gBridge, "onSwitchRequested", "(ZJ)V");
-    gPresetFailed = e->GetStaticMethodID(gBridge, "onPresetFailed", "(JLjava/lang/String;)V");
-    gPresetLoaded = e->GetStaticMethodID(gBridge, "onPresetLoaded", "(J)V");
-    checkException(e);
+    // Resolve each id separately: a failed lookup leaves a pending exception that must be
+    // cleared before the next JNI call. A missing method (e.g. renamed by R8) is reported by
+    // name; the release smoke test requires "upcalls ready 3/3".
+    struct Upcall { jmethodID* id; const char* name; const char* sig; };
+    const Upcall all[] = {
+        {&gSwitchRequested, "onSwitchRequested", "(ZJ)V"},
+        {&gPresetFailed, "onPresetFailed", "(JLjava/lang/String;)V"},
+        {&gPresetLoaded, "onPresetLoaded", "(J)V"},
+    };
+    int ready = 0;
+    for (const auto& u : all) {
+        *u.id = e->GetStaticMethodID(gBridge, u.name, u.sig);
+        if (e->ExceptionCheck()) e->ExceptionClear();
+        if (*u.id == nullptr) {
+            __android_log_print(ANDROID_LOG_ERROR, "Koggles", "upcalls: method %s%s not found", u.name, u.sig);
+        } else {
+            ++ready;
+        }
+    }
+    __android_log_print(ANDROID_LOG_INFO, "Koggles", "upcalls ready %d/3", ready);
 }
 
 void switchRequested(bool hardCut, int64_t displayedRequestId) {

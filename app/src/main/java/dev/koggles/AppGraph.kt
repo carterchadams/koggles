@@ -87,6 +87,13 @@ object AppGraph {
     /** What the UI drives: [playback], unless a test has overridden it. */
     val playbackControls: PlaybackControls get() = playbackOverride ?: playback
 
+    @Volatile private var audioSourceOverride: dev.koggles.audio.SourceFactory? = null
+
+    /** Instrumented tests only: audio sources come from [factory] (null restores the real ones). */
+    fun overrideAudioForTest(factory: dev.koggles.audio.SourceFactory?) {
+        audioSourceOverride = factory
+    }
+
     /** Instrumented tests only: replaces what the UI drives (null restores [playback]). */
     fun overrideForTest(playback: PlaybackControls?) {
         playbackOverride = playback
@@ -138,8 +145,11 @@ object AppGraph {
         renderCommands = RenderCommands(NativeRendererPort(app.resources.displayMetrics.xdpi))
         audio = AudioSession(
             factory = { source, consent, generation ->
-                when (source) {
-                    Source.Standard -> VisualizerSource(onWaveform = { pcmGate.pushU8(generation, it, it.size) })
+                audioSourceOverride?.create(source, consent, generation) ?: when (source) {
+                    Source.Standard -> VisualizerSource(
+                        onWaveform = { pcmGate.pushU8(generation, it, it.size) },
+                        log = { android.util.Log.w("KogglesAudio", it) },
+                    )
                     Source.HighQuality ->
                         if (consent != null) PlaybackCaptureSource(app, consent, generation) else UnavailableSource()
                 }

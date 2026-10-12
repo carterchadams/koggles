@@ -20,3 +20,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# --- Koggles (Blueprint Task 21) -------------------------------------------------------------
+# Native code calls NativeBridge's static upcalls by name (jni/upcalls.cpp) and binds its external
+# methods; R8 sees no Kotlin callers for the upcalls and would remove them ("upcalls ready 0/3").
+-keep class dev.koggles.NativeBridge { *; }
+-keepclasseswithmembernames class * { native <methods>; }
+-keep interface dev.koggles.NativeListener { *; }

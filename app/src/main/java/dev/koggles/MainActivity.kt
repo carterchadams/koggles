@@ -41,7 +41,7 @@ import dev.koggles.settings.SettingsValues
 import dev.koggles.ui.AudioErrorScreen
 import dev.koggles.ui.MenuModel
 import dev.koggles.ui.MenuOverlay
-import dev.koggles.ui.consumeAllTouches
+import dev.koggles.ui.blockTouchesBelow
 import dev.koggles.ui.isAudioError
 import dev.koggles.ui.menu.MenuActions
 import dev.koggles.ui.visualizerGestures
@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
                 if (menuOpen) Menu()
                 val state = snapshot.state
                 if (state == AudioState.ShowingExplainer || state.isAudioError()) {
-                    Box(Modifier.fillMaxSize().consumeAllTouches()) {
+                    Box(Modifier.fillMaxSize().blockTouchesBelow()) {
                         if (state == AudioState.ShowingExplainer) {
                             Explainer { audio.dispatch(AudioEvent.ExplainerAccepted) }
                         } else {
