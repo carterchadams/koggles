@@ -136,8 +136,14 @@ android {
         applicationId = "dev.koggles"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // Release CI passes both from the tag (tools/ci/version-from-tag.sh); local builds keep the defaults.
+        val tagVersionName = providers.gradleProperty("kogglesVersionName").orNull
+        val tagVersionCode = providers.gradleProperty("kogglesVersionCode").orNull
+        if ((tagVersionName == null) != (tagVersionCode == null)) {
+            throw GradleException("kogglesVersionName and kogglesVersionCode must be set together")
+        }
+        versionCode = tagVersionCode?.toInt() ?: 1
+        versionName = tagVersionName ?: "0.1.0"
         testInstrumentationRunner = "dev.koggles.KogglesTestRunner"
         ndk {
             abiFilters += "arm64-v8a"
