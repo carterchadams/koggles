@@ -201,4 +201,18 @@ Java_dev_koggles_NativeBridge_rendererLastGlError(JNIEnv*, jobject, jlong h) {
     return h != 0 ? asRenderer(h)->lastGlError() : 0;
 }
 
+JNIEXPORT jint JNICALL
+Java_dev_koggles_NativeBridge_rendererEyeCopyErrors(JNIEnv*, jobject, jlong h) {
+    return h != 0 ? asRenderer(h)->eyeCopyErrors() : 0;
+}
+
+// GL thread only: one pixel of the current read framebuffer, packed 0xRRGGBBAA.
+JNIEXPORT jint JNICALL
+Java_dev_koggles_NativeBridge_glReadPixelRgba(JNIEnv*, jobject, jint x, jint y) {
+    GLubyte px[4] = {0, 0, 0, 0};
+    glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    return static_cast<jint>((static_cast<uint32_t>(px[0]) << 24) | (static_cast<uint32_t>(px[1]) << 16) |
+                             (static_cast<uint32_t>(px[2]) << 8) | px[3]);
+}
+
 }  // extern "C"
