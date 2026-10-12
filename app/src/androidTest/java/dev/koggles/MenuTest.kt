@@ -240,6 +240,15 @@ class MenuTest {
         ).assertIsDisplayed()
     }
 
+    /** H7 (human, 2026-10-12): the presets ship with the projectM team's public-domain statement. */
+    @Test fun licensesScreen_includesThePresetsPublicDomainStatement() {
+        openMenu()
+        scrollTo(hasText("About & licenses"))
+        compose.onNodeWithText("About & licenses").performClick()
+        compose.onNodeWithText("koggles-starter-pack-presets.md", substring = true).performClick()
+        compose.onNodeWithText("it is safe to assume them to be in the public domain", substring = true).assertExists()
+    }
+
     private fun firstBundledRef(): PresetRef = runBlocking {
         withTimeout(20_000) { AppGraph.libraryRepo.state.first { it.bundledReady } }
             .catalog.packs.first { it.id.startsWith("bundled:") }

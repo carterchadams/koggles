@@ -72,6 +72,9 @@ if [ "${1:-}" != "--fixtures" ]; then
   mkdir -p "$tmp/n/$pk/Other"; printf 'MILKDROP_PRESET_VERSION=201\n' > "$tmp/n/$pk/Other/Koggles - Nested.milk"
   cp "$apk" "$tmp/m-nested.apk"; (cd "$tmp/n" && zip -q "$tmp/m-nested.apk" "$pk/Other/Koggles - Nested.milk")
   resign "$tmp/m-nested.apk" "$tmp/m-nested.s.apk"; only5 content-nested-outside-transitions "$tmp/m-nested.s.apk"
+  # H7: the presets ship with the projectM team's public-domain statement.
+  cp "$apk" "$tmp/m-nostatement.apk"; zip -qd "$tmp/m-nostatement.apk" 'assets/licenses/koggles-starter-pack-presets.md'
+  resign "$tmp/m-nostatement.apk" "$tmp/m-nostatement.s.apk"; only5 no-public-domain-statement "$tmp/m-nostatement.s.apk"
 fi
 echo "verify-release-apk: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

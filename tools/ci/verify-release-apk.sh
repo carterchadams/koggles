@@ -78,7 +78,8 @@ print(len(have))
 PY
 )"; content_rc=$?
 lic_missing=""
-for f in assets/licenses/projectM-LGPL-2.1.txt assets/licenses/cardboard-Apache-2.0.txt; do
+for f in assets/licenses/projectM-LGPL-2.1.txt assets/licenses/cardboard-Apache-2.0.txt \
+         assets/licenses/koggles-starter-pack-presets.md; do   # the last: H7, presets' public-domain statement
   grep -qx "$f" <<<"$entries" || lic_missing="$lic_missing $f"
 done
 if [ "$content_rc" -eq 0 ] && [ -z "$lic_missing" ]; then ok 5 content "($content presets, allowlist matched)"
