@@ -14,7 +14,10 @@ if [ "\$1 \$2" = "release list" ]; then
   [ "\$mode" = list-fails ] && { echo "HTTP 502" >&2; exit 1; }
   [ "\$mode" = none ] && exit 0
   [ "\$mode" = bad-tag ] && { printf 'v0.1.0\nnightly\n'; exit 0; }
-  printf 'v0.1.0\nv0.2.0\nv0.10.0\n'; exit 0
+  printf 'v0.1.0\nv0.2.0\nv0.10.0\n'
+  # Drafts (never shipped) are listed only when --exclude-drafts is missing.
+  case " \$* " in *" --exclude-drafts "*) ;; *) printf 'v1.0.0\ndraft-junk\n' ;; esac
+  exit 0
 fi
 if [ "\$1 \$2" = "release view" ]; then
   # Notes are never consulted; a misleading body must not matter.
