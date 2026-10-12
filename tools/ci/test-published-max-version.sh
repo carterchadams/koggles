@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests tools/ci/published-max-version.sh against a fake `gh` (plans/RELEASE-HARDENING.md, RH6):
-# it must fail closed on any query failure, never report 0 by accident.
+# versionCodes come from the published tag names (canonical vX.Y.Z), never from release notes;
+# it must fail closed on any query failure or non-version tag, never report 0 by accident.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
@@ -12,16 +13,12 @@ mode="$1"
 if [ "\$1 \$2" = "release list" ]; then
   [ "\$mode" = list-fails ] && { echo "HTTP 502" >&2; exit 1; }
   [ "\$mode" = none ] && exit 0
+  [ "\$mode" = bad-tag ] && { printf 'v0.1.0\nnightly\n'; exit 0; }
   printf 'v0.1.0\nv0.2.0\nv0.10.0\n'; exit 0
 fi
 if [ "\$1 \$2" = "release view" ]; then
-  [ "\$mode" = view-fails ] && [ "\$3" = v0.2.0 ] && { echo "HTTP 500" >&2; exit 1; }
-  case "\$3" in
-    v0.1.0) echo 'Koggles MVP'; echo; echo 'versionCode: 100' ;;
-    v0.2.0) echo 'versionCode: 200' ;;
-    v0.10.0) [ "\$mode" = no-code ] && echo 'notes without a code' || echo 'versionCode: 1000' ;;
-  esac
-  exit 0
+  # Notes are never consulted; a misleading body must not matter.
+  echo 'versionCode: 1'; echo 'versionCode: 99999999999999999999'; exit 0
 fi
 exit 3
 FAKE
@@ -39,7 +36,6 @@ check() { # name mode expected-out-or-"fail"
 check max-of-three ok 1000
 check no-releases none 0
 check list-fails list-fails fail
-check view-fails view-fails fail
-check release-without-code no-code fail
+check non-version-tag bad-tag fail
 echo "published-max-version: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
