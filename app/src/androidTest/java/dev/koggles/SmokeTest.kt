@@ -58,35 +58,46 @@ class SmokeTest {
         }
     }
 
-    /** Accumulates frame counts (the native stats reset on every read) until [frames] have drawn. */
-    private fun assertFramesWithoutGlError(frames: Int) {
-        val h = waitFor("renderer attached") { commands.attachedHandle.takeIf { it != 0L } }
-        NativeBridge.rendererFrameStats(h) // reset the window
-        var drawn = 0.0
-        waitFor("$frames frames", timeoutMs = 90_000) {
-            drawn += NativeBridge.rendererFrameStats(h)[2]
-            if (drawn >= frames) true else { Thread.sleep(500); null }
+    /**
+     * Counts frames on the GL thread (VisualizerView.onFrameDrawn, which reports each frame's GL
+     * error) until [frames] have drawn, failing if any frame in the window reported an error.
+     * Reading the native frame stats from this thread would race the renderer.
+     */
+    private fun assertFramesWithoutGlError(scenario: ActivityScenario<MainActivity>, frames: Int) {
+        waitFor("renderer attached") { commands.attachedHandle.takeIf { it != 0L } }
+        val drawn = java.util.concurrent.atomic.AtomicInteger(0)
+        val firstError = java.util.concurrent.atomic.AtomicInteger(0)
+        val done = java.util.concurrent.CountDownLatch(1)
+        scenario.onActivity { activity ->
+            checkNotNull(activity.visualizerView).onFrameDrawn = { error ->
+                if (error != 0) firstError.compareAndSet(0, error)
+                if (drawn.incrementAndGet() >= frames) done.countDown()
+            }
         }
-        assertTrue("rendererFrameStats[2] >= $frames (got $drawn)", drawn >= frames)
-        assertEquals("GL error", 0, NativeBridge.rendererLastGlError(h))
+        try {
+            assertTrue("$frames frames drawn (got ${drawn.get()})", done.await(90, java.util.concurrent.TimeUnit.SECONDS))
+        } finally {
+            scenario.onActivity { it.visualizerView?.onFrameDrawn = null }
+        }
+        assertEquals("first GL error in the measured window", 0, firstError.get())
     }
 
     @Test fun normalMode_120Frames_noGlError() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             awaitActiveAudio()
-            assertFramesWithoutGlError(120)
+            assertFramesWithoutGlError(scenario, 120)
         }
     }
 
     @Test fun gogglesMode_120Frames_noGlError() {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             awaitActiveAudio()
             runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
             val h = waitFor("goggles active") {
                 commands.attachedHandle.takeIf { it != 0L && NativeBridge.rendererGogglesActive(it) }
             }
             assertTrue(NativeBridge.rendererGogglesActive(h))
-            assertFramesWithoutGlError(120)
+            assertFramesWithoutGlError(scenario, 120)
         }
     }
 
