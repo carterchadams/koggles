@@ -45,6 +45,10 @@ object NativeBridge {
     /** Sets projectM's texture search paths; textures are reset only when the list changed. */
     external fun rendererSetTextureSearchPaths(h: Long, paths: Array<String>)
     external fun rendererLastGlError(h: Long): Int
+    /** True only in diagnostics builds (-PkogglesShaderDiagnostics), which capture projectM's preset/shader messages. */
+    external fun diagnosticsEnabled(): Boolean
+    /** Diagnostics builds only: projectM's preset/shader messages since the last call, fully drained; "" otherwise. */
+    external fun takeDiagnostics(): String
     /** Frames whose goggles eye copy raised a GL error (cumulative per renderer; any thread). */
     external fun rendererEyeCopyErrors(h: Long): Int
     /** GL thread only: one pixel of the current read framebuffer, packed `0xRRGGBBAA`. */

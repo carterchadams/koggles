@@ -25,6 +25,13 @@ set(CMAKE_PROJECT_VERSION_MAJOR 4)
 set(CMAKE_PROJECT_VERSION_MINOR 1)
 set(CMAKE_PROJECT_VERSION_PATCH 7)
 
+# Test builds only (-PkogglesShaderDiagnostics): projectM's own ENABLE_DEBUG_MILKDROP_PRESET makes
+# it report swallowed warp/composite shader failures on stderr, which jni/diagnostics.cpp captures.
+option(KOGGLES_SHADER_DIAGNOSTICS "Capture projectM preset and shader diagnostics (test builds)" OFF)
+if(KOGGLES_SHADER_DIAGNOSTICS)
+    set(ENABLE_DEBUG_MILKDROP_PRESET ON CACHE BOOL "" FORCE)
+endif()
+
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/projectm ${CMAKE_BINARY_DIR}/projectm)
 
 # Cardboard SDK: libGfxPluginCardboard.so is extracted from the sub-built AAR by
@@ -40,6 +47,7 @@ add_library(koggles SHARED
     core/device_params.cpp
     core/eye_layout.cpp
     core/frame_stats.cpp
+    jni/diagnostics.cpp
     jni/native_bridge.cpp
     jni/upcalls.cpp
     renderer/engine.cpp
@@ -49,5 +57,8 @@ add_library(koggles SHARED
     renderer/renderer.cpp
 )
 target_include_directories(koggles PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/core)
+if(KOGGLES_SHADER_DIAGNOSTICS)
+    target_compile_definitions(koggles PRIVATE KOGGLES_SHADER_DIAGNOSTICS=1)
+endif()
 target_link_libraries(koggles libprojectM::projectM cardboard_api GLESv3 EGL log android)
 target_link_options(koggles PRIVATE -Wl,-z,max-page-size=16384)

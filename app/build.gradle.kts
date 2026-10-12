@@ -1,6 +1,7 @@
 import java.util.Properties
 import java.io.File
 import java.io.OutputStream
+import java.security.MessageDigest
 import javax.inject.Inject
 import org.gradle.process.ExecOperations
 
@@ -55,6 +56,9 @@ abstract class FetchBundledContent : DefaultTask() {
     /** Repo name to the commit SHA to check out. */
     @get:Input abstract val shas: MapProperty<String, String>
 
+    /** Repo name to no-cone sparse-checkout patterns; such repos are partial clones that download only those blobs. */
+    @get:Optional @get:Input abstract val sparse: MapProperty<String, List<String>>
+
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
     @get:Inject abstract val exec: ExecOperations
@@ -67,10 +71,13 @@ abstract class FetchBundledContent : DefaultTask() {
             val dir = outputDir.get().asFile.resolve(name)
             val haveSha = dir.resolve(".git").isDirectory &&
                 git(dir, "cat-file", "-e", "$sha^{commit}", ignoreExit = true) == 0
+            val patterns = sparse.getOrElse(emptyMap())[name]
             if (!haveSha) {
                 dir.deleteRecursively()
-                git(outputDir.get().asFile, "clone", "--quiet", "--filter=blob:none", "--no-checkout", url, name)
+                val sparseFlag = if (patterns != null) listOf("--sparse") else emptyList()
+                git(outputDir.get().asFile, *(listOf("clone", "--quiet", "--filter=blob:none", "--no-checkout") + sparseFlag + listOf(url, name)).toTypedArray())
             }
+            if (patterns != null) git(dir, *(listOf("sparse-checkout", "set", "--no-cone") + patterns).toTypedArray())
             git(dir, "-c", "advice.detachedHead=false", "checkout", "--quiet", "--force", sha)
             git(dir, "clean", "-dffxq")
         }
@@ -85,34 +92,98 @@ abstract class FetchBundledContent : DefaultTask() {
         }.exitValue
 }
 
+/**
+ * Stages the Koggles Starter Pack (spec §5.1): exactly the upstream files the allowlist names, each
+ * checked against its pinned SHA-256 and flattened into one folder. Fails naming every missing path,
+ * hash mismatch and duplicate file name, so the bundle can't silently drift from the reviewed list.
+ */
+abstract class StageStarterPack : DefaultTask() {
+    @get:InputFile abstract val allowlist: RegularFileProperty
+    @get:InputDirectory abstract val repoDir: DirectoryProperty
+
+    /** Transition presets (DP5): staged under `! Transition/`, which the indexer treats as transitions. */
+    @get:InputFile abstract val transitionsAllowlist: RegularFileProperty
+    @get:InputDirectory abstract val transitionsRepoDir: DirectoryProperty
+
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun stage() {
+        val out = outputDir.get().asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        val problems = stage(allowlist.get().asFile, repoDir.get().asFile, out) +
+            stage(transitionsAllowlist.get().asFile, transitionsRepoDir.get().asFile, out.resolve("! Transition"))
+        if (problems.isNotEmpty()) throw GradleException("Koggles Starter Pack allowlists:\n" + problems.joinToString("\n"))
+    }
+
+    /** Copies every allowlisted file from [repo] into [dest], flattened; returns the problems found. */
+    private fun stage(list: File, repo: File, dest: File): List<String> {
+        dest.mkdirs()
+        val names = mutableSetOf<String>()
+        val problems = mutableListOf<String>()
+        list.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { line ->
+            val want = line.substringBefore("  ")
+            val path = line.substringAfter("  ")
+            val src = repo.resolve(path)
+            when {
+                !src.isFile -> problems += "${list.name}: missing upstream: $path"
+                !names.add(src.name) -> problems += "${list.name}: duplicate file name: $path"
+                else -> {
+                    val got = MessageDigest.getInstance("SHA-256").digest(src.readBytes())
+                        .joinToString("") { "%02x".format(it) }
+                    if (got != want) problems += "${list.name}: sha256 mismatch: $path (allowlist $want, upstream $got)"
+                    else src.copyTo(dest.resolve(src.name))
+                }
+            }
+        }
+        return problems
+    }
+}
+
 val bundledContentDir = layout.buildDirectory.dir("content")
 val bundledAssetsDir = layout.buildDirectory.dir("generated/bundled")
 
 val fetchBundledContent by tasks.registering(FetchBundledContent::class) {
     description = "Clones the pinned bundled preset and texture repos into build/content/."
+    urls.put("presets-projectm-classic", "https://github.com/projectM-visualizer/presets-projectm-classic")
     urls.put("presets-cream-of-the-crop", "https://github.com/projectM-visualizer/presets-cream-of-the-crop")
     urls.put("presets-milkdrop-texture-pack", "https://github.com/projectM-visualizer/presets-milkdrop-texture-pack")
+    shas.put("presets-projectm-classic", libs.versions.classicSha.get())
     shas.put("presets-cream-of-the-crop", libs.versions.cotcSha.get())
+    sparse.put("presets-cream-of-the-crop", listOf("/! Transition/", "/LICENSE.md")) // DP5: transitions only
     shas.put("presets-milkdrop-texture-pack", libs.versions.texturePackSha.get())
     outputDir.set(bundledContentDir)
+}
+
+val stageStarterPack by tasks.registering(StageStarterPack::class) {
+    description = "Stages the hash-verified Koggles Starter Pack from the fetched classic presets."
+    allowlist.set(providers.gradleProperty("kogglesPresetAllowlist").map { layout.projectDirectory.file(it) }
+        .orElse(layout.projectDirectory.file("bundled-presets.txt")))
+    repoDir.set(fetchBundledContent.flatMap { it.outputDir.dir("presets-projectm-classic") })
+    transitionsAllowlist.set(providers.gradleProperty("kogglesTransitionAllowlist").map { layout.projectDirectory.file(it) }
+        .orElse(layout.projectDirectory.file("bundled-transitions.txt")))
+    transitionsRepoDir.set(fetchBundledContent.flatMap { it.outputDir.dir("presets-cream-of-the-crop") })
+    outputDir.set(layout.buildDirectory.dir("generated/starter-pack"))
 }
 
 val syncBundledContent by tasks.registering(Sync::class) {
     description = "Lays out the fetched content as assets in build/generated/bundled/."
     val textureExt = setOf("jpg", "jpeg", "png", "tga", "bmp", "dds") // = presets.TEXTURE_EXT
-    val cotc = fetchBundledContent.flatMap { it.outputDir.dir("presets-cream-of-the-crop") }
+    val classic = fetchBundledContent.flatMap { it.outputDir.dir("presets-projectm-classic") }
     val pack = fetchBundledContent.flatMap { it.outputDir.dir("presets-milkdrop-texture-pack") }
-    from(cotc) {
-        include { it.isDirectory || it.name.substringAfterLast('.', "").lowercase() == "milk" }
-        exclude("**/.git/**")
-        into("presets/Cream of the Crop")
-    }
+    from(stageStarterPack) { into("presets/Koggles Starter Pack") }
     from(pack.map { it.dir("textures") }) {
         include { it.isDirectory || it.name.substringAfterLast('.', "").lowercase() in textureExt }
         eachFile { path = "textures/$name" }
     }
-    from(cotc) {
+    from(classic) {
         include("LICENSE.md", "README.md")
+        rename { "projectm-classic-presets-$it" }
+        into("licenses")
+    }
+    from(fetchBundledContent.flatMap { it.outputDir.dir("presets-cream-of-the-crop") }) {
+        include("LICENSE.md") // the projectM team's statement on MilkDrop presets (DP5)
         rename { "cream-of-the-crop-$it" }
         into("licenses")
     }
@@ -127,6 +198,17 @@ val syncBundledContent by tasks.registering(Sync::class) {
 }
 
 tasks.named("preBuild") { dependsOn(syncBundledContent) }
+
+// androidTest asset: the allowlist BundledPackTest checks the APK's pack against. Mutation runs pass
+// a deliberately wrong copy with -PkogglesTestAllowlist=<file>; the shipped pack is unaffected.
+val androidTestAllowlist by tasks.registering(Sync::class) {
+    from(providers.gradleProperty("kogglesTestAllowlist").map { layout.projectDirectory.file(it) }
+        .orElse(layout.projectDirectory.file("bundled-presets.txt"))) { rename { "bundled-presets.txt" } }
+    from(providers.gradleProperty("kogglesTestTransitionAllowlist").map { layout.projectDirectory.file(it) }
+        .orElse(layout.projectDirectory.file("bundled-transitions.txt"))) { rename { "bundled-transitions.txt" } }
+    into(layout.buildDirectory.dir("generated/androidTestAllowlist"))
+}
+tasks.named("preBuild") { dependsOn(androidTestAllowlist) }
 
 android {
     namespace = "dev.koggles"
@@ -152,6 +234,10 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += "-DANDROID_STL=c++_shared"
+                // Test builds only: capture projectM preset/shader diagnostics (see jni/diagnostics.h).
+                if (providers.gradleProperty("kogglesShaderDiagnostics").isPresent) {
+                    arguments += "-DKOGGLES_SHADER_DIAGNOSTICS=ON"
+                }
             }
         }
     }
@@ -192,7 +278,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Optional side-by-side install for device experiments (e.g. the preset sweep), so a
+            // debug build never has to replace an installed release build: -PkogglesAppIdSuffix=.sweep
+            providers.gradleProperty("kogglesAppIdSuffix").orNull?.let { applicationIdSuffix = it }
+        }
         release {
+            // Device experiments only: a suffixed, still-minified release installs next to the real app
+            // (release smoke on a phone with Koggles installed): -PkogglesAppIdSuffix=.smoke
+            providers.gradleProperty("kogglesAppIdSuffix").orNull?.let { applicationIdSuffix = it }
             signingConfig = releaseSigning
             isMinifyEnabled = true
             isShrinkResources = true
@@ -217,6 +311,9 @@ android {
     sourceSets {
         getByName("main") {
             assets.srcDir("build/generated/bundled") // = bundledAssetsDir
+        }
+        getByName("androidTest") {
+            assets.srcDir("build/generated/androidTestAllowlist") // = androidTestAllowlist
         }
     }
 

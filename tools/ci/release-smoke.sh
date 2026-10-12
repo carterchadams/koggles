@@ -3,6 +3,8 @@
 # minified build's native→Kotlin upcalls work, by watching one auto-advance driven by them.
 #
 #   tools/ci/release-smoke.sh <apk>          (adb must reach exactly one device)
+#   KOGGLES_PKG=dev.koggles.smoke tools/ci/release-smoke.sh <suffixed apk>
+#     tests a suffixed build (-PkogglesAppIdSuffix) without touching an installed dev.koggles.
 #
 # PASS requires, in the captured log (see smoke-verdict.py), and the same app pid alive after a
 # settle period:
@@ -12,7 +14,7 @@
 set -euo pipefail
 
 apk="${1:?usage: release-smoke.sh <apk>}"
-pkg=dev.koggles
+pkg="${KOGGLES_PKG:-dev.koggles}"   # only this package is uninstalled, installed and launched
 timeout_s="${SMOKE_TIMEOUT_S:-90}"
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
@@ -21,7 +23,7 @@ adb uninstall "$pkg" >/dev/null 2>&1 || true   # fresh settings: unlocked, 30 s 
 adb install "$apk" >/dev/null
 adb shell pm grant "$pkg" android.permission.RECORD_AUDIO
 adb logcat -c
-adb shell am start -n "$pkg/.MainActivity" >/dev/null
+adb shell am start -n "$pkg/dev.koggles.MainActivity" >/dev/null   # the code namespace stays dev.koggles
 
 pid=""
 for _ in $(seq 1 50); do

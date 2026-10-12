@@ -4,8 +4,9 @@ Koggles is an Android music visualizer built on [projectM](https://github.com/pr
 the open-source reimplementation of Winamp's MilkDrop. It reacts to whatever your phone is playing
 and runs full screen, or in **goggles mode**: side-by-side with lens correction, for phone VR mounts.
 
-- **Bundled presets:** the [Cream of the Crop](https://github.com/projectM-visualizer/presets-cream-of-the-crop)
-  pack (about 9800 presets) and the MilkDrop texture pack.
+- **Bundled presets:** the Koggles Starter Pack, a selection of 299 presets from projectM's
+  [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), and the
+  MilkDrop texture pack.
 - **Your own packs:** choose a folder once (for example `Documents/Koggles/<pack>/…`) and its
   presets join the rotation.
 - **Gestures:** tap for the next preset; double-tap for the menu (playback, packs and browser,
@@ -106,9 +107,12 @@ Android requires every APK to be signed, so a rebuilt APK carries your key, not 
 
 - **projectM:** LGPL-2.1, used as a shared library.
 - **Google Cardboard SDK:** Apache-2.0.
-- **Cream of the Crop presets:** released by their authors without a specific license; the pack
-  maintainers treat them as public domain and remove presets on request. See
-  `assets/licenses/cream-of-the-crop-LICENSE.md` in the app.
+- **Koggles Starter Pack presets:** a selection from projectM's
+  [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), whose
+  repository states no license. MilkDrop presets were generally released by their authors without
+  one; the projectM team treats them as public domain and removes presets on request (`LICENSE.md` in
+  its `presets-cream-of-the-crop` repository). Licensing for public distribution is an open decision
+  (H7 in [`plans/RELEASE-HARDENING.md`](plans/RELEASE-HARDENING.md)).
 - **MilkDrop texture pack:** the textures shipped with MilkDrop plus others used by presets.
 
 All licence texts are in the app under *Library → About & licenses*.

@@ -2,7 +2,7 @@
 # Static verification of a release APK (plans/RELEASE-HARDENING.md, Task R3).
 #   verify-release-apk.sh <apk> <mapping.txt> <versionName> <versionCode> <certSha256>
 # Prints "PASS n <check>" / "FAIL n <check>: <why>" per check; exits 0 only if all 8 pass.
-# Env: MAX_APK_MB (default 150), MIN_PRESETS (default 9000), BUILD_TOOLS (default
+# Env: MAX_APK_MB (default 15), ALLOWLIST (default app/bundled-presets.txt), BUILD_TOOLS (default
 # $ANDROID_HOME/build-tools/36.0.0). Signer parsing lives in parse-signer.sh (tested with fixtures).
 set -uo pipefail
 apk="${1:?apk}"; mapping="${2:?mapping}"; want_name="${3:?versionName}"; want_code="${4:?versionCode}"; want_cert="${5:?certSha256}"
@@ -45,14 +45,44 @@ for lib in libkoggles.so libprojectM-4.so libGfxPluginCardboard.so libc++_shared
   grep -qx "lib/arm64-v8a/$lib" <<<"$entries" || missing="$missing $lib"
 done
 if [ -z "$missing" ]; then ok 4 native-libs; else bad 4 native-libs "missing$missing"; fi
-# 5 content and licences
-presets="$(grep -cE '^assets/presets/.*\.milk$' <<<"$entries")"
+# 5 content and licences: the bundled presets are exactly the hash-pinned allowlist (one flat folder,
+# same names, same SHA-256; plans/PRESET-PACK-CLASSIC.md), and the licence files are present.
+allowlist="${ALLOWLIST:-$here/../../app/bundled-presets.txt}"
+transitions="${TRANSITIONS_ALLOWLIST:-$here/../../app/bundled-transitions.txt}"
+content="$(python3 - "$apk" "$allowlist" "$transitions" <<'PY' 2>&1
+import hashlib, sys, zipfile
+apk, allow, trans = sys.argv[1], sys.argv[2], sys.argv[3]
+pack = "assets/presets/Koggles Starter Pack/"
+sub = "! Transition/"  # the only subfolder allowed (transition presets)
+want = {}
+for listfile, prefix in ((allow, ""), (trans, sub)):
+    for line in open(listfile, encoding="utf-8"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            digest, path = line.split("  ", 1)
+            want[prefix + path.rsplit("/", 1)[-1]] = digest
+with zipfile.ZipFile(apk) as z:
+    names = [n for n in z.namelist() if n.startswith("assets/presets/") and not n.endswith("/")]
+    def placed(n):
+        rel = n[len(pack):]
+        return n.startswith(pack) and ("/" not in rel or (rel.startswith(sub) and "/" not in rel[len(sub):]))
+    outside = sorted(n for n in names if not placed(n))
+    have = {n[len(pack):]: hashlib.sha256(z.read(n)).hexdigest() for n in names if n not in outside}
+missing = sorted(set(want) - set(have))
+extra = sorted(set(have) - set(want))
+changed = sorted(n for n in set(want) & set(have) if want[n] != have[n])
+if missing or extra or changed or outside:
+    print(f"missing={missing[:3]} extra={extra[:3]} changed={changed[:3]} outside-pack={outside[:3]}")
+    sys.exit(1)
+print(len(have))
+PY
+)"; content_rc=$?
 lic_missing=""
 for f in assets/licenses/projectM-LGPL-2.1.txt assets/licenses/cardboard-Apache-2.0.txt; do
   grep -qx "$f" <<<"$entries" || lic_missing="$lic_missing $f"
 done
-if [ "$presets" -ge "${MIN_PRESETS:-9000}" ] && [ -z "$lic_missing" ]; then ok 5 content "($presets presets)"
-else bad 5 content "presets=$presets licences-missing:${lic_missing:- none}"; fi
+if [ "$content_rc" -eq 0 ] && [ -z "$lic_missing" ]; then ok 5 content "($content presets, allowlist matched)"
+else bad 5 content "presets: ${content} licences-missing:${lic_missing:- none}"; fi
 # 6 JNI upcalls survived R8 (dex is authoritative) and the bridge class kept its name (mapping)
 dex="$("$apkanalyzer" dex packages --defined-only "$apk" 2>/dev/null)"
 up_missing=""
@@ -65,6 +95,6 @@ else bad 6 jni-upcalls "missing in dex:${up_missing:- none}"; fi
 if grep -q '^application-debuggable' <<<"$badging"; then bad 7 not-debuggable "application-debuggable present"; else ok 7 not-debuggable; fi
 # 8 size
 mb=$(( $(stat -c %s "$apk") / 1024 / 1024 ))
-if [ "$mb" -lt "${MAX_APK_MB:-150}" ]; then ok 8 size "(${mb} MB)"; else bad 8 size "${mb} MB >= ${MAX_APK_MB:-150} MB"; fi
+if [ "$mb" -lt "${MAX_APK_MB:-15}" ]; then ok 8 size "(${mb} MB)"; else bad 8 size "${mb} MB >= ${MAX_APK_MB:-15} MB"; fi
 
 [ "$failures" -eq 0 ]

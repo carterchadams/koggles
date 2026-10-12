@@ -1,3 +1,4 @@
+#include "diagnostics.h"
 #include <jni.h>
 
 #include <GLES3/gl3.h>
@@ -213,6 +214,21 @@ Java_dev_koggles_NativeBridge_glReadPixelRgba(JNIEnv*, jobject, jint x, jint y) 
     glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
     return static_cast<jint>((static_cast<uint32_t>(px[0]) << 24) | (static_cast<uint32_t>(px[1]) << 16) |
                              (static_cast<uint32_t>(px[2]) << 8) | px[3]);
+}
+
+// Diagnostics builds only (see jni/diagnostics.h); a no-op otherwise.
+JNIEXPORT jboolean JNICALL
+Java_dev_koggles_NativeBridge_diagnosticsEnabled(JNIEnv*, jobject) {
+    return koggles::diag::enabled() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jstring JNICALL
+Java_dev_koggles_NativeBridge_takeDiagnostics(JNIEnv* env, jobject) {
+    std::string text = koggles::diag::take();
+    for (char& c : text) {
+        if (static_cast<unsigned char>(c) >= 0x80) c = '?';  // NewStringUTF needs (modified) UTF-8
+    }
+    return env->NewStringUTF(text.c_str());
 }
 
 }  // extern "C"

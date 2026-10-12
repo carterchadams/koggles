@@ -110,7 +110,8 @@ The workflow:
 
 1. builds and signs;
 2. runs the static checks (signature and pinned certificate, version, native libraries,
-   ≥ 9000 presets, licence files, JNI upcalls kept by R8, not debuggable, size);
+   presets exactly matching `app/bundled-presets.txt` by name and SHA-256, licence files, JNI
+   upcalls kept by R8, not debuggable, size);
 3. runs the emulator smoke test;
 4. builds the source archive;
 5. publishes four files: the APK, its `.sha256`, the R8 mapping and the source archive.
