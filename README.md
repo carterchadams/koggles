@@ -63,8 +63,10 @@ The process is only worth describing because of what it caught. Some examples:
   rule against it, and made dozens of small decisions it had been told to raise with the author.
   Its own review of the build admitted both, and an audit of every commit followed.
 
-Still open: headset fit and rendering performance have not been signed off on a physical phone,
-and the release pipeline has not yet run on GitHub.
+Confirmed on the phone by the author: headset fit with the default settings, and Bluetooth audio
+driving the visuals. Still open: rendering performance on the phone has not been measured in
+goggles mode, transition durations have not been timed, and the release pipeline has not yet run
+on GitHub.
 
 ## Downloads
 
@@ -128,6 +130,7 @@ the build prints a warning. Publishing releases is described in [RELEASING.md](R
 | Unit | `./gradlew :app:testDebugUnitTest` |
 | Instrumented (device or emulator) | `./gradlew :app:connectedDebugAndroidTest` |
 | Host C++ (with TSAN) | `cmake -S native-tests -B build/host-tests && cmake --build build/host-tests -j && ctest --test-dir build/host-tests` |
+| Bundled-preset shader gate | `./gradlew :app:connectedDebugAndroidTest -PkogglesShaderDiagnostics -Pandroid.testInstrumentationRunnerArguments.class=dev.koggles.BundledPresetsCompileTest` |
 | Release tooling | `tools/ci/test-*.sh` |
 
 Useful build switches for device work: `-PkogglesAppIdSuffix=.sweep` installs a build beside the
@@ -175,5 +178,5 @@ All licence texts are in the app under *Library → About & licenses*.
 - **High quality on Android 15+:** locking the phone ends the capture session, so High quality
   asks for consent again (one tap) on return. Standard does not.
 - **In the headset:** there is no in-headset menu yet; settings, lens spacing and preset changes
-  mean taking the phone out of the mount. Headset fit and frame timing on a physical phone are
-  not yet signed off.
+  mean taking the phone out of the mount. Frame timing in goggles mode on a physical phone has
+  not been measured.

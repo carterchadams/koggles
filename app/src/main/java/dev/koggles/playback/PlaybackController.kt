@@ -8,6 +8,7 @@ import dev.koggles.settings.Settings
 import dev.koggles.settings.SettingsValues
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import java.io.IOException
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -176,8 +180,10 @@ class PlaybackController(
         lastLoadedId = requestId
         playlist.onLoaded(requestId)
         val issued = lastIssued ?: return
+        if (issued.requestId != requestId) return
+        if (issued.kind == Kind.Interstitial) startInterstitialTimer(requestId)
         val ref = (issued.target as? Target.Preset)?.ref ?: return
-        if (issued.requestId == requestId && issued.kind == Kind.Normal) {
+        if (issued.kind == Kind.Normal) {
             scope.launch { settings.update { it.copy(lastPresetKey = ref.key) } }
         }
     }
@@ -195,41 +201,111 @@ class PlaybackController(
         hardCutPending = false
         val id = r.requestId
         fun fresh() = id == playlist.latestRequestId
+        // Provider operations are keyed by the catalog they were issued against: a preset key names
+        // a pack and path, not a tree, so after a folder replacement the same key must not join a
+        // read still stalled on the old tree.
+        val source = System.identityHashCode(libraryState.value.catalog)
         loadJob = scope.launch {
             when (val target = r.target) {
                 Target.Idle -> if (fresh()) sink.loadIdle(id)
                 is Target.Preset -> {
+                    val user = target.ref.packId.startsWith("user:")
                     val data = try {
-                        reader.read(target.ref)
+                        bounded("read:$source:${target.ref.key}", capped = user) { reader.read(target.ref) }
+                            ?: throw IOException("preset read timed out")
                     } catch (e: CancellationException) {
                         throw e
+                    } catch (e: NoCapacity) {
+                        // Never attempted: skip it for now rather than mark it broken.
+                        if (fresh()) playlist.onLoadFailed(id, markBroken = false)?.let(::process)
+                        return@launch
                     } catch (e: Exception) {
                         if (target.ref.packId.startsWith("user:")) {
                             // The folder may be gone: let the library re-check it, and
                             // pick next only once the playlist has the result, so a lost folder
                             // can't burn through the failure bound.
-                            onUserReadFailure()
-                            applied.first { it === libraryState.value }
+                            runCatching {
+                                bounded("revalidate", capped = true) {
+                                    onUserReadFailure()
+                                    applied.first { it === libraryState.value }
+                                }
+                            }
                         }
                         if (fresh()) playlist.onLoadFailed(id)?.let(::process)
                         return@launch
                     }
                     if (!fresh()) return@launch
-                    val paths = texturePaths(target.ref.packId)
+                    val paths = try {
+                        bounded("textures:$source:${target.ref.packId}", capped = user) { texturePaths(target.ref.packId) }
+                    } catch (e: NoCapacity) {
+                        if (fresh()) playlist.onLoadFailed(id, markBroken = false)?.let(::process)
+                        return@launch
+                    }
+                    if (paths == null) {
+                        if (fresh()) playlist.onLoadFailed(id)?.let(::process)
+                        return@launch
+                    }
                     if (!fresh()) return@launch
                     sink.load(data, id, smooth, paths)
                 }
             }
         }
-        if (r.kind == Kind.Interstitial) {
-            timerJob = scope.launch {
-                delay(values.interstitialSec * 1000L)
-                if (fresh()) playlist.onInterstitialElapsed(id)?.let(::process)
+    }
+
+    /** Provider work (reads, texture paths, revalidation) outlives the load that asked for it. */
+    private val detached = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
+
+    /** In-flight provider operations by key; a duplicate request joins the one already running. */
+    private val inFlight = HashMap<String, Deferred<*>>()
+    private val cappedKeys = HashSet<String>()
+
+    /** No capacity for another user-folder operation; the preset was not attempted. */
+    private class NoCapacity : RuntimeException()
+
+    /**
+     * Runs [block] once per [key] on [detached] and waits at most [LOAD_TIMEOUT_MS] for its result,
+     * else null. A provider that never answers (a stalled cloud folder) would otherwise stall
+     * playback: timer events for the preset still on screen are dropped as stale while the new one
+     * never arrives. The wait is abandoned, never the work: cancellation can't interrupt a blocking
+     * content-provider read, and cancelling a folder revalidation mid-way would leave the library
+     * half updated. Work can't pile up either: the same key (operation, source catalog, target)
+     * joins the operation already running, and at most [MAX_DETACHED] distinct user-folder operations
+     * run at once, beyond which [NoCapacity] is thrown and the preset is skipped, not broken. A late
+     * result is dropped, since only the current load job talks to the sink. Main thread only.
+     */
+    private suspend fun <T> bounded(key: String, capped: Boolean, block: suspend () -> T): T? {
+        @Suppress("UNCHECKED_CAST")
+        val job = inFlight[key] as Deferred<T>? ?: run {
+            // Only user-folder work can stall, so only it is capped: bundled assets must keep
+            // playing however many folder reads are stuck.
+            if (capped && inFlight.keys.count { it in cappedKeys } >= MAX_DETACHED) throw NoCapacity()
+            if (capped) cappedKeys += key
+            detached.async { block() }.also { d ->
+                inFlight[key] = d
+                d.invokeOnCompletion { scope.launch { if (inFlight[key] === d) { inFlight.remove(key); cappedKeys.remove(key) } } }
             }
+        }
+        return withTimeoutOrNull(LOAD_TIMEOUT_MS) { job.await() }
+    }
+
+    /**
+     * An interstitial's duration is its time on screen, so its timer starts when the renderer
+     * reports it loaded, not when the load was issued: reading, texture setup and shader
+     * compilation can take seconds on a slow phone and would otherwise eat the interstitial.
+     */
+    private fun startInterstitialTimer(id: Long) {
+        timerJob?.cancel()
+        timerJob = scope.launch {
+            delay(values.interstitialSec * 1000L)
+            if (id == playlist.latestRequestId) playlist.onInterstitialElapsed(id)?.let(::process)
         }
     }
 
-    private companion object {
-        const val USER_INDEX_WAIT_MS = 3_000L
+    companion object {
+        private const val USER_INDEX_WAIT_MS = 3_000L
+        /** Reading a preset's text or texture paths longer than this counts as a failed load. */
+        const val LOAD_TIMEOUT_MS = 10_000L
+        /** Distinct user-folder operations allowed in flight at once; beyond that a preset is skipped. */
+        const val MAX_DETACHED = 4
     }
 }

@@ -70,11 +70,15 @@ class FolderGrant(context: Context) {
     /** The URI the user chose last; survives restarts. */
     private val prefs = context.applicationContext.getSharedPreferences("folder_grant", Context.MODE_PRIVATE)
 
+    private val record = GrantSnapshot(
+        lock,
+        grants = { resolver.persistedUriPermissions.map { PersistedGrant(it.uri.toString(), it.isReadPermission) } },
+        active = { prefs.getString(KEY_ACTIVE, null) },
+    )
+
     /** The granted tree if a readable grant exists and its root document still answers. */
     fun currentTree(): SafDocTree? {
-        val grants = resolver.persistedUriPermissions.map { PersistedGrant(it.uri.toString(), it.isReadPermission) }
-        // Never observes a replacement half-way (e.g. a rejected record before its rollback).
-        val active = synchronized(lock) { prefs.getString(KEY_ACTIVE, null) }
+        val (grants, active) = record.snapshot()
         val picked = GrantRules.pick(grants, active, ::probe) ?: return null
         return SafDocTree(resolver, Uri.parse(picked))
     }
@@ -135,4 +139,18 @@ class FolderGrant(context: Context) {
     private companion object {
         const val KEY_ACTIVE = "active"
     }
+}
+
+/**
+ * Reads the persisted grants and the active-folder record as one consistent pair. A replacement
+ * (take the new grant, record it, release the old) runs under the same [lock]; a snapshot that
+ * saw old grants with the new active URI would make [GrantRules.pick] return null and look like a
+ * lost folder.
+ */
+internal class GrantSnapshot(
+    private val lock: Any,
+    private val grants: () -> List<PersistedGrant>,
+    private val active: () -> String?,
+) {
+    fun snapshot(): Pair<List<PersistedGrant>, String?> = synchronized(lock) { grants() to active() }
 }

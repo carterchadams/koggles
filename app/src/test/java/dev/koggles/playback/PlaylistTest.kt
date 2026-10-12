@@ -391,6 +391,17 @@ class PlaylistTest {
         assertEquals(keysOf(cat)[3], p.current?.key)
     }
 
+    /** A preset skipped for lack of capacity stays in the rotation; a failed one does not. */
+    @Test fun skippedWithoutBroken_staysReachable_butFailedDoesNot() {
+        val p = playlist(flatCatalog(4))
+        val skipped = p.next()
+        p.onLoadFailed(skipped.requestId, markBroken = false)
+        assertTrue(presetKey(skipped) in p.reachable())
+        val failed = p.next()
+        p.onLoadFailed(failed.requestId)
+        assertFalse(presetKey(failed) in p.reachable())
+    }
+
     // ---- Request ids: never below the renderer's current request, whoever loaded it ----
 
     /** Ids never fall below the renderer's current request, whoever loaded it. */

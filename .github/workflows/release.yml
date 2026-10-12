@@ -259,7 +259,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          max="$(tools/ci/published-max-version.sh)"
+          max="$(EXCLUDE_TAG="$TAG" tools/ci/published-max-version.sh)"
           [ "$VERSION_CODE" -gt "$max" ] || { echo "versionCode $VERSION_CODE is not above published $max"; exit 1; }
 
       - name: Create the GitHub Release

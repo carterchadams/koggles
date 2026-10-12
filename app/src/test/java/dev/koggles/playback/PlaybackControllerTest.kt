@@ -15,7 +15,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -70,9 +75,19 @@ class PlaybackControllerTest {
     private val sink = FakeSink()
     private val gates = HashMap<String, CompletableDeferred<Unit>>()
     private val failing = HashSet<String>()
+    /** Keys whose read blocks a real thread (a provider that never answers), until [blockRelease]. */
+    private val blocking = HashSet<String>()
+    private val blockRelease = java.util.concurrent.CountDownLatch(1)
+    @After fun releaseBlockedReads() = blockRelease.countDown()
+
+    private val readCalls = HashMap<String, Int>()
+    /** Keys whose first read fails (after any gate); later reads of the same key succeed. */
+    private val failFirst = HashSet<String>()
     private val reader = PresetReader { ref: PresetRef ->
+        val n = readCalls.merge(ref.key, 1, Int::plus)!!
+        if (ref.key in blocking) withContext(Dispatchers.IO) { blockRelease.await() }
         gates[ref.key]?.await()
-        if (ref.key in failing) throw IOException("unreadable ${ref.key}")
+        if (ref.key in failing || (n == 1 && ref.key in failFirst)) throw IOException("unreadable ${ref.key}")
         "data:${ref.key}"
     }
     private val libState = MutableStateFlow(state(ready = true))
@@ -211,7 +226,7 @@ class PlaybackControllerTest {
         })
         c.start(); advanceUntilIdle()
         val before = sink.loads().size
-        c.select("user:u/u0.milk"); advanceUntilIdle()
+        c.select("user:u/u0.milk"); runCurrent() // revalidation in flight (not stalled past the deadline)
         assertEquals(1, hookCalls)
         assertEquals("no pick while the library is being revalidated", before, sink.loads().size)
         hook.complete(Unit); advanceUntilIdle()
@@ -240,8 +255,8 @@ class PlaybackControllerTest {
         c.onPresetLoaded(shown)
         val target = keys.first { it != loadedKey(sink.loads().single()) }
         gates[target] = CompletableDeferred()
-        c.select(target); advanceUntilIdle()
-        c.onSwitchRequested(false, shown); advanceUntilIdle()
+        c.select(target); runCurrent() // the read is in flight (not stalled past the load timeout)
+        c.onSwitchRequested(false, shown); runCurrent()
         gates[target]!!.complete(Unit); advanceUntilIdle()
         assertEquals(2, sink.loads().size)
         assertEquals(target, loadedKey(sink.loads().last()))
@@ -283,10 +298,10 @@ class PlaybackControllerTest {
         c.onPresetLoaded(shown)
         val target = keys.first { it != loadedKey(sink.loads().single()) }
         gates[target] = CompletableDeferred()
-        c.select(target); advanceUntilIdle() // our latest: its read is in flight
+        c.select(target); runCurrent() // our latest: its read is in flight (not stalled past the load timeout)
         val foreign = c.nowPlayingRequestId() + 1_000
         sink.current = foreign // accepted ...
-        c.onPresetFailed(foreign, "foreign preset failed"); advanceUntilIdle() // ... and failed
+        c.onPresetFailed(foreign, "foreign preset failed"); runCurrent() // ... and failed
         gates[target]!!.complete(Unit); advanceUntilIdle()
         c.onSwitchRequested(false, shown); advanceUntilIdle() // the older displayed id: stale
         val last = sink.loads().last()
@@ -323,8 +338,177 @@ class PlaybackControllerTest {
         c.next(); runCurrent()
         assertTrue(loadedKey(sink.loads().last()).contains("!t/"))
         assertTrue(c.nowPlaying.value.interstitial)
+        c.onPresetLoaded(c.nowPlayingRequestId()) // on screen now
         advanceTimeBy(4_100); runCurrent()
         assertFalse(loadedKey(sink.loads().last()).contains("!t/"))
+    }
+
+    /** A preset read that never completes (a stalled cloud provider) must not stall playback. */
+    @Test fun stalledRead_timesOut_andPlaybackMovesOn() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val target = keys.first { it != loadedKey(sink.loads().single()) }
+        gates[target] = CompletableDeferred() // never completed
+        c.select(target); runCurrent()
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        val last = sink.loads().last()
+        assertEquals(2, sink.loads().size)
+        assertTrue("moved on from the stalled preset: $last", loadedKey(last) != target)
+    }
+
+    /**
+     * Cancellation can't interrupt a blocking content-provider read, so the deadline must not wait for
+     * the read to return: playback moves on at the deadline while the read is still stuck.
+     */
+    @Test fun blockingRead_doesNotHoldPlaybackPastTheDeadline() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val target = keys.first { it != loadedKey(sink.loads().single()) }
+        blocking += target
+        c.select(target); runCurrent()
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        assertEquals(2, sink.loads().size)
+        assertTrue(loadedKey(sink.loads().last()) != target)
+    }
+
+    /** A stalled folder revalidation after a user-pack read failure must not hold playback either. */
+    @Test fun stalledRevalidation_doesNotHoldPlaybackPastTheDeadline() = runTest {
+        val withUser = catalogOf(pack("bundled:p", "p0.milk", "p1.milk"), pack("user:u", "u0.milk"))
+        libState.value = state(ready = true, cat = withUser, grant = true)
+        failing += "user:u/u0.milk"
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") }
+        val c = controller(onUserReadFailure = { withContext(Dispatchers.IO) { blockRelease.await() } })
+        c.start(); advanceUntilIdle()
+        val before = sink.loads().size
+        c.select("user:u/u0.milk"); runCurrent()
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        assertEquals(before + 1, sink.loads().size)
+        assertTrue(loadedKey(sink.loads().last()).startsWith("bundled:"))
+    }
+
+    /**
+     * Abandoning the wait must not cancel the work: a revalidation cancelled mid-way (it has a
+     * suspension point between changing its generation and publishing) leaves the library half
+     * updated. The hook must run to completion after playback has moved on.
+     */
+    @Test fun stalledRevalidation_isAbandonedNotCancelled() = runTest {
+        val withUser = catalogOf(pack("bundled:p", "p0.milk", "p1.milk"), pack("user:u", "u0.milk"))
+        libState.value = state(ready = true, cat = withUser, grant = true)
+        failing += "user:u/u0.milk"
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") }
+        var completed = false
+        var cancelled = false
+        val c = controller(onUserReadFailure = {
+            try {
+                withContext(Dispatchers.IO) { blockRelease.await() }
+                completed = true
+            } catch (e: CancellationException) {
+                cancelled = true
+                throw e
+            }
+        })
+        c.start(); advanceUntilIdle()
+        c.select("user:u/u0.milk"); runCurrent()
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        assertTrue("playback moved on", loadedKey(sink.loads().last()).startsWith("bundled:"))
+        blockRelease.countDown()
+        // The blocked IO thread wakes in real time; give it a moment to resume onto the test scheduler.
+        repeat(100) { if (completed || cancelled) return@repeat; Thread.sleep(20); advanceUntilIdle() }
+        assertFalse("the revalidation was cancelled mid-way", cancelled)
+        assertTrue("the revalidation ran to completion", completed)
+    }
+
+    /** Detached provider work must not grow without bound: duplicates coalesce, distinct stalls are capped. */
+    @Test fun repeatedSelectionOfStalledPresets_coalescesAndBoundsDetachedWork() = runTest {
+        val big = catalogOf(pack("bundled:p", "p0.milk"), pack("user:u", *(0..9).map { "u$it.milk" }.toTypedArray()))
+        libState.value = state(ready = true, cat = big, grant = true)
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") }
+        val c = controller(); c.start(); advanceUntilIdle()
+        val stalled = (0..7).map { "user:u/u$it.milk" }
+        blocking += stalled
+        repeat(5) { c.select(stalled[0]); runCurrent() } // the same stalled preset, five times
+        assertEquals("duplicate reads of one stalled preset coalesce", 1, readCalls[stalled[0]])
+        for (k in stalled.drop(1)) { c.select(k); runCurrent() } // seven more distinct stalled presets
+        val started = stalled.count { (readCalls[it] ?: 0) > 0 }
+        assertTrue("distinct stalled reads are capped at ${PlaybackController.MAX_DETACHED}, got $started",
+            started <= PlaybackController.MAX_DETACHED)
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        assertTrue("playback moved on", loadedKey(sink.loads().last()) !in stalled)
+    }
+
+    /** Successful loads leave nothing behind in the detached-work supervisor. */
+    @Test fun successfulLoads_leaveNoLingeringDetachedJobs() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        repeat(6) { c.next(); advanceUntilIdle() }
+        // The detached-work supervisor is the scope's only CompletableJob child (the controller's flow
+        // collectors are plain coroutines); after successful loads it must hold nothing.
+        val root = scopes.last().coroutineContext[Job]!!
+        val supervisors = root.children.filterIsInstance<CompletableJob>().toList()
+        assertEquals("exactly one detached-work supervisor", 1, supervisors.size)
+        assertEquals("lingering detached jobs after successful loads", 0, supervisors.single().children.count())
+    }
+
+    /**
+     * Coalescing must not cross a folder replacement: the same pack/path in a new tree is a
+     * different read. Here the old tree's read is stalled, the folder is replaced, and the new
+     * preset is selected: it must get its own read, and the old read's late failure must not mark
+     * the healthy replacement broken.
+     */
+    @Test fun readsDoNotCoalesceAcrossACatalogReplacement() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val target = keys.first { it != loadedKey(sink.loads().single()) }
+        gates[target] = CompletableDeferred()
+        failFirst += target // the old tree's read will fail once released
+        c.select(target); runCurrent()
+        assertEquals(1, readCalls[target])
+        libState.value = state(ready = true, cat = flatCatalog(4)) // same keys, a replacement tree
+        runCurrent()
+        c.select(target); runCurrent()
+        assertEquals("a new tree gets its own read", 2, readCalls[target])
+        gates[target]!!.complete(Unit); advanceUntilIdle()
+        assertEquals(target, loadedKey(sink.loads().last()))
+    }
+
+    /**
+     * Stalled user-folder reads must not take bundled playback down with them: bundled assets can't
+     * stall, so they are not subject to the cap, and a preset turned away for lack of capacity is
+     * not broken, only skipped.
+     */
+    @Test fun saturatedUserReads_bundledStillPlays_andRejectedPresetIsNotBroken() = runTest {
+        val cat = catalogOf(pack("bundled:p", "p0.milk", "p1.milk"), pack("user:u", "u0.milk", "u1.milk", "u2.milk", "u3.milk", "u4.milk", "u5.milk"))
+        libState.value = state(ready = true, cat = cat, grant = true)
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") }
+        val c = controller(); c.start(); advanceUntilIdle()
+        val users = (0..4).map { "user:u/u$it.milk" }
+        blocking += users
+        for (k in users.take(PlaybackController.MAX_DETACHED)) { c.select(k); runCurrent() } // capacity saturated
+        c.select(users[4]); runCurrent()
+        assertEquals("turned away, not read", null, readCalls[users[4]])
+        c.select("bundled:p/p1.milk"); runCurrent()
+        assertEquals("bundled playback continues under saturation", "bundled:p/p1.milk", loadedKey(sink.loads().last()))
+        blockRelease.countDown()
+        // The stalled reads wake on real IO threads; let them complete and leave the in-flight table.
+        repeat(25) { Thread.sleep(20); advanceUntilIdle() }
+        c.select(users[4]); runCurrent()
+        repeat(100) { if (loadedKey(sink.loads().last()) == users[4]) return@repeat; Thread.sleep(20); advanceUntilIdle() }
+        assertEquals("the rejected preset was not marked broken", users[4], loadedKey(sink.loads().last()))
+    }
+
+    /** The interstitial's visible duration starts when it is on screen, not when its load was issued. */
+    @Test fun interstitialTimer_startsAtLoadedAck_notAtIssue() = runTest {
+        val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "!t/t0.milk"))
+        libState.value = state(ready = true, cat = mixed)
+        val c = controller(); c.start(); advanceUntilIdle()
+        gates["bundled:a/!t/t0.milk"] = CompletableDeferred()
+        c.next(); runCurrent()
+        assertTrue(c.nowPlaying.value.interstitial)
+        advanceTimeBy(8_000); runCurrent() // slow load: the interstitial is not on screen yet
+        assertTrue("destination issued before the interstitial was shown", c.nowPlaying.value.interstitial)
+        gates["bundled:a/!t/t0.milk"]!!.complete(Unit); runCurrent()
+        val shown = c.nowPlayingRequestId()
+        c.onPresetLoaded(shown)
+        advanceTimeBy(3_900); runCurrent()
+        assertTrue(c.nowPlaying.value.interstitial)
+        advanceTimeBy(200); runCurrent()
+        assertFalse(c.nowPlaying.value.interstitial)
     }
 
     @Test fun navigationCancelsInterstitialTimer() = runTest {
@@ -399,7 +583,7 @@ class PlaybackControllerTest {
         c.start(); advanceUntilIdle(); sink.calls.clear()
         gateFirst = true
         c.select(keys[1]); runCurrent()
-        c.select(keys[2]); advanceUntilIdle()
+        c.select(keys[2]); runCurrent() // joins the pack's in-flight texture lookup (not stalled past the deadline)
         gate.complete(Unit); advanceUntilIdle()
         assertEquals(listOf(keys[2]), sink.loads().map(::loadedKey))
     }

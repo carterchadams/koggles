@@ -119,8 +119,10 @@ The workflow:
   `gh release delete vX.Y.Z` (keep the tag) and re-run the failed workflow, or delete both and
   tag again.
 - **A bad release shipped:** don't reuse its version. Fix the problem and release a higher
-  version. If you must withdraw it, use `gh release delete vX.Y.Z --cleanup-tag`; its
-  `versionCode` stays "used" for anyone who installed it.
+  version. If you must withdraw it, delete the release but **keep its tag**
+  (`gh release delete vX.Y.Z`, without `--cleanup-tag`): the version guard reads the repo's
+  `v*` tags as well as its releases, so the withdrawn `versionCode` stays reserved for everyone
+  who installed it.
 - **The key is compromised:** stop releasing and remove the Environment secrets. Releases signed
   with a new key can't update existing installs, so users must uninstall and reinstall.
   (Android's v3.1 key rotation can bridge this, but it isn't set up yet.) Generate a new key,
