@@ -1,6 +1,7 @@
 import java.util.Properties
 import java.io.File
 import java.io.OutputStream
+import java.security.MessageDigest
 import javax.inject.Inject
 import org.gradle.process.ExecOperations
 
@@ -85,35 +86,78 @@ abstract class FetchBundledContent : DefaultTask() {
         }.exitValue
 }
 
+/**
+ * Stages the Koggles Starter Pack (spec §5.1): exactly the upstream files the allowlist names, each
+ * checked against its pinned SHA-256 and flattened into one folder. Fails naming every missing path,
+ * hash mismatch and duplicate file name, so the bundle can't silently drift from the reviewed list.
+ */
+abstract class StageStarterPack : DefaultTask() {
+    @get:InputFile abstract val allowlist: RegularFileProperty
+    @get:InputDirectory abstract val repoDir: DirectoryProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun stage() {
+        val out = outputDir.get().asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        val repo = repoDir.get().asFile
+        val names = mutableSetOf<String>()
+        val problems = mutableListOf<String>()
+        allowlist.get().asFile.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { line ->
+            val want = line.substringBefore("  ")
+            val path = line.substringAfter("  ")
+            val src = repo.resolve(path)
+            when {
+                !src.isFile -> problems += "missing upstream: $path"
+                !names.add(src.name) -> problems += "duplicate file name: $path"
+                else -> {
+                    val got = MessageDigest.getInstance("SHA-256").digest(src.readBytes())
+                        .joinToString("") { "%02x".format(it) }
+                    if (got != want) problems += "sha256 mismatch: $path (allowlist $want, upstream $got)"
+                    else src.copyTo(out.resolve(src.name))
+                }
+            }
+        }
+        if (problems.isNotEmpty()) {
+            throw GradleException("Koggles Starter Pack allowlist ${allowlist.get().asFile}:\n" + problems.joinToString("\n"))
+        }
+    }
+}
+
 val bundledContentDir = layout.buildDirectory.dir("content")
 val bundledAssetsDir = layout.buildDirectory.dir("generated/bundled")
 
 val fetchBundledContent by tasks.registering(FetchBundledContent::class) {
     description = "Clones the pinned bundled preset and texture repos into build/content/."
-    urls.put("presets-cream-of-the-crop", "https://github.com/projectM-visualizer/presets-cream-of-the-crop")
+    urls.put("presets-projectm-classic", "https://github.com/projectM-visualizer/presets-projectm-classic")
     urls.put("presets-milkdrop-texture-pack", "https://github.com/projectM-visualizer/presets-milkdrop-texture-pack")
-    shas.put("presets-cream-of-the-crop", libs.versions.cotcSha.get())
+    shas.put("presets-projectm-classic", libs.versions.classicSha.get())
     shas.put("presets-milkdrop-texture-pack", libs.versions.texturePackSha.get())
     outputDir.set(bundledContentDir)
+}
+
+val stageStarterPack by tasks.registering(StageStarterPack::class) {
+    description = "Stages the hash-verified Koggles Starter Pack from the fetched classic presets."
+    allowlist.set(providers.gradleProperty("kogglesPresetAllowlist").map { layout.projectDirectory.file(it) }
+        .orElse(layout.projectDirectory.file("bundled-presets.txt")))
+    repoDir.set(fetchBundledContent.flatMap { it.outputDir.dir("presets-projectm-classic") })
+    outputDir.set(layout.buildDirectory.dir("generated/starter-pack"))
 }
 
 val syncBundledContent by tasks.registering(Sync::class) {
     description = "Lays out the fetched content as assets in build/generated/bundled/."
     val textureExt = setOf("jpg", "jpeg", "png", "tga", "bmp", "dds") // = presets.TEXTURE_EXT
-    val cotc = fetchBundledContent.flatMap { it.outputDir.dir("presets-cream-of-the-crop") }
+    val classic = fetchBundledContent.flatMap { it.outputDir.dir("presets-projectm-classic") }
     val pack = fetchBundledContent.flatMap { it.outputDir.dir("presets-milkdrop-texture-pack") }
-    from(cotc) {
-        include { it.isDirectory || it.name.substringAfterLast('.', "").lowercase() == "milk" }
-        exclude("**/.git/**")
-        into("presets/Cream of the Crop")
-    }
+    from(stageStarterPack) { into("presets/Koggles Starter Pack") }
     from(pack.map { it.dir("textures") }) {
         include { it.isDirectory || it.name.substringAfterLast('.', "").lowercase() in textureExt }
         eachFile { path = "textures/$name" }
     }
-    from(cotc) {
+    from(classic) {
         include("LICENSE.md", "README.md")
-        rename { "cream-of-the-crop-$it" }
+        rename { "projectm-classic-presets-$it" }
         into("licenses")
     }
     from(pack) {

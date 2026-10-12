@@ -15,7 +15,7 @@ git -C "$root" submodule foreach --quiet --recursive \
 {
   echo "Koggles corresponding source for $ref ($(git -C "$root" rev-parse "$ref^{commit}"))"
   git -C "$root" submodule status --recursive
-  grep -E '^(cotcSha|texturePackSha) =' "$root/gradle/libs.versions.toml"
+  grep -E '^(classicSha|texturePackSha) =' "$root/gradle/libs.versions.toml"
 } > "$tmp/$name/content-shas.txt"
 mkdir -p "$(dirname "$out")"
 tar -czf "$out" -C "$tmp" "$name"

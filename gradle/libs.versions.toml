@@ -20,8 +20,9 @@ cardboardMaterial = "1.12.0"
 cardboardProtobufJavalite = "3.19.4"
 cardboardJspecify = "1.0.0"
 # Bundled content (Task 12): commit SHAs of the projectM content repos, fetched at build time.
-# https://github.com/projectM-visualizer/presets-cream-of-the-crop
-cotcSha = "0180df21f5e0bd39b9060cc5de420ed2f1f9e509"
+# https://github.com/projectM-visualizer/presets-projectm-classic (the Koggles Starter Pack is a
+# hash-pinned selection from it: app/bundled-presets.txt)
+classicSha = "14a6244a7d32eb7e114e1a92d1cb93358cdcc54a"
 # https://github.com/projectM-visualizer/presets-milkdrop-texture-pack
 texturePackSha = "6368812f27bc747b517218fbf89d21d59afce4d9"
 
