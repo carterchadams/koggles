@@ -59,9 +59,9 @@ class SmokeTest {
     }
 
     /**
-     * Counts frames on the GL thread (VisualizerView.onFrameDrawn, which reports each frame's GL
-     * error) until [frames] have drawn, failing if any frame in the window reported an error.
-     * Reading the native frame stats from this thread would race the renderer.
+     * Counts frames projectM actually rendered (native frame-stat deltas, read on the GL thread in
+     * VisualizerView.onFrameDrawn) until [frames], failing if any frame in the window reported a GL
+     * error. Reading the native stats from the test thread would race the renderer.
      */
     private fun assertFramesWithoutGlError(scenario: ActivityScenario<MainActivity>, frames: Int) {
         waitFor("renderer attached") { commands.attachedHandle.takeIf { it != 0L } }
@@ -71,7 +71,11 @@ class SmokeTest {
         scenario.onActivity { activity ->
             checkNotNull(activity.visualizerView).onFrameDrawn = { error ->
                 if (error != 0) firstError.compareAndSet(0, error)
-                if (drawn.incrementAndGet() >= frames) done.countDown()
+                // GL thread: the native counter only advances for frames projectM rendered (not when
+                // the renderer has no projectM instance), and reading it here does not race.
+                val h = commands.attachedHandle
+                val rendered = if (h != 0L) NativeBridge.rendererFrameStats(h)[2].toInt() else 0
+                if (drawn.addAndGet(rendered) >= frames) done.countDown()
             }
         }
         try {
