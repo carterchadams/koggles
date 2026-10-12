@@ -163,20 +163,32 @@ android {
         }
     }
 
-    // Release signing (Blueprint Task 21): keystore.properties at the repo root, never committed.
-    // Without it the release APK is left unsigned (CI's release workflow refuses to run that way).
+    // Release signing (Blueprint Task 21). CI passes the credentials as environment variables
+    // (KOGGLES_KEYSTORE_FILE, KOGGLES_STORE_PASSWORD, KOGGLES_KEY_ALIAS, KOGGLES_KEY_PASSWORD), so they
+    // reach the signer unchanged; locally, keystore.properties at the repo root (never committed).
+    // With neither, the release APK is left unsigned (CI's release workflow refuses to run that way).
+    val envKeystore = providers.environmentVariable("KOGGLES_KEYSTORE_FILE").orNull
     val keystoreProps = rootProject.file("keystore.properties")
-    val releaseSigning = if (keystoreProps.isFile) {
-        val props = Properties().apply { keystoreProps.inputStream().use { load(it) } }
-        signingConfigs.create("release") {
-            storeFile = rootProject.file(props.getProperty("storeFile"))
-            storePassword = props.getProperty("storePassword")
-            keyAlias = props.getProperty("keyAlias")
-            keyPassword = props.getProperty("keyPassword")
+    val releaseSigning = when {
+        envKeystore != null -> signingConfigs.create("release") {
+            storeFile = file(envKeystore)
+            storePassword = providers.environmentVariable("KOGGLES_STORE_PASSWORD").orNull
+            keyAlias = providers.environmentVariable("KOGGLES_KEY_ALIAS").orNull
+            keyPassword = providers.environmentVariable("KOGGLES_KEY_PASSWORD").orNull
         }
-    } else {
-        logger.warn("keystore.properties not found: release APK is unsigned")
-        null
+        keystoreProps.isFile -> {
+            val props = Properties().apply { keystoreProps.inputStream().use { load(it) } }
+            signingConfigs.create("release") {
+                storeFile = rootProject.file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+        else -> {
+            logger.warn("keystore.properties not found: release APK is unsigned")
+            null
+        }
     }
 
     buildTypes {
