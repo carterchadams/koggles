@@ -41,6 +41,14 @@ class AudioSession(
         effects.forEach(::execute)
     }
 
+    /**
+     * Instrumented tests only: replaces the snapshot without running any effect, so a test can put
+     * an overlay (explainer, error screen) on screen directly.
+     */
+    internal fun resetForTest(snapshot: AudioSnapshot) {
+        _snapshot.value = snapshot
+    }
+
     /** Result of the consent request [requestId]; `null` means declined or cancelled. */
     fun provideConsent(requestId: Long, consent: ConsentData?) {
         pendingConsent = consent

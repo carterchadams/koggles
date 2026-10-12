@@ -1,5 +1,6 @@
 package dev.koggles
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -135,6 +136,18 @@ class MenuTest {
             compose.activity.resources.configuration.orientation !=
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE
         }
+    }
+
+    /** D1: double tap no longer closes the menu, and the scrim passes nothing to the visualization. */
+    @Test fun scrimDoubleTap_doesNotClose() {
+        openMenu()
+        menu.performTouchInput { doubleClick(Offset(4f, centerY)) }
+        Thread.sleep(800)
+        assertTrue(AppGraph.menu.open.value)
+        menu.performTouchInput { click(Offset(4f, centerY)) }
+        Thread.sleep(800)
+        assertEquals(0, fake.nexts.get())
+        assertTrue(AppGraph.menu.open.value)
     }
 
     @Test fun back_closesMenu() {

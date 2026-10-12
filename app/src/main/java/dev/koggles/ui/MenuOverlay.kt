@@ -2,7 +2,6 @@ package dev.koggles.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -23,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.koggles.audio.AudioSnapshot
@@ -53,7 +51,7 @@ data class MenuModel(
 
 /**
  * Spec §4 menu: a flat panel over a dimmed single preview. Touches never reach the visualization;
- * a double tap on the scrim, or Back, closes it.
+ * Back closes it (D1: double tap no longer does).
  */
 @Composable
 fun MenuOverlay(model: MenuModel, actions: MenuActions, highlightChooseFolder: Boolean, onClose: () -> Unit) {
@@ -62,12 +60,12 @@ fun MenuOverlay(model: MenuModel, actions: MenuActions, highlightChooseFolder: B
     Box(
         Modifier.fillMaxSize().testTag("menu")
             .background(Color.Black.copy(alpha = 0.55f))
-            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { onClose() }) },
+            .blockTouchesBelow(),
     ) {
         Surface(
             modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(12.dp)
                 .widthIn(max = 520.dp).fillMaxWidth().fillMaxHeight()
-                .consumeAllTouches(),
+                .blockTouchesBelow(),
             shape = MaterialTheme.shapes.large,
             tonalElevation = 4.dp,
         ) {
