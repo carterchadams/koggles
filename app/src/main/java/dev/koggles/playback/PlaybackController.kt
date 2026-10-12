@@ -209,26 +209,38 @@ class PlaybackController(
             when (val target = r.target) {
                 Target.Idle -> if (fresh()) sink.loadIdle(id)
                 is Target.Preset -> {
+                    val user = target.ref.packId.startsWith("user:")
                     val data = try {
-                        bounded("read:$source:${target.ref.key}") { reader.read(target.ref) }
-                            ?: throw IOException("preset read timed out or no capacity")
+                        bounded("read:$source:${target.ref.key}", capped = user) { reader.read(target.ref) }
+                            ?: throw IOException("preset read timed out")
                     } catch (e: CancellationException) {
                         throw e
+                    } catch (e: NoCapacity) {
+                        // Never attempted: skip it for now rather than mark it broken.
+                        if (fresh()) playlist.onLoadFailed(id, markBroken = false)?.let(::process)
+                        return@launch
                     } catch (e: Exception) {
                         if (target.ref.packId.startsWith("user:")) {
                             // The folder may be gone: let the library re-check it, and
                             // pick next only once the playlist has the result, so a lost folder
                             // can't burn through the failure bound.
-                            bounded("revalidate") {
-                                onUserReadFailure()
-                                applied.first { it === libraryState.value }
+                            runCatching {
+                                bounded("revalidate", capped = true) {
+                                    onUserReadFailure()
+                                    applied.first { it === libraryState.value }
+                                }
                             }
                         }
                         if (fresh()) playlist.onLoadFailed(id)?.let(::process)
                         return@launch
                     }
                     if (!fresh()) return@launch
-                    val paths = bounded("textures:$source:${target.ref.packId}") { texturePaths(target.ref.packId) }
+                    val paths = try {
+                        bounded("textures:$source:${target.ref.packId}", capped = user) { texturePaths(target.ref.packId) }
+                    } catch (e: NoCapacity) {
+                        if (fresh()) playlist.onLoadFailed(id, markBroken = false)?.let(::process)
+                        return@launch
+                    }
                     if (paths == null) {
                         if (fresh()) playlist.onLoadFailed(id)?.let(::process)
                         return@launch
@@ -245,6 +257,10 @@ class PlaybackController(
 
     /** In-flight provider operations by key; a duplicate request joins the one already running. */
     private val inFlight = HashMap<String, Deferred<*>>()
+    private val cappedKeys = HashSet<String>()
+
+    /** No capacity for another user-folder operation; the preset was not attempted. */
+    private class NoCapacity : RuntimeException()
 
     /**
      * Runs [block] once per [key] on [detached] and waits at most [LOAD_TIMEOUT_MS] for its result,
@@ -253,17 +269,20 @@ class PlaybackController(
      * never arrives. The wait is abandoned, never the work: cancellation can't interrupt a blocking
      * content-provider read, and cancelling a folder revalidation mid-way would leave the library
      * half updated. Work can't pile up either: the same key (operation, source catalog, target)
-     * joins the operation already running, and
-     * at most [MAX_DETACHED] distinct operations run at once, beyond which a load fails fast. A late
+     * joins the operation already running, and at most [MAX_DETACHED] distinct user-folder operations
+     * run at once, beyond which [NoCapacity] is thrown and the preset is skipped, not broken. A late
      * result is dropped, since only the current load job talks to the sink. Main thread only.
      */
-    private suspend fun <T> bounded(key: String, block: suspend () -> T): T? {
+    private suspend fun <T> bounded(key: String, capped: Boolean, block: suspend () -> T): T? {
         @Suppress("UNCHECKED_CAST")
         val job = inFlight[key] as Deferred<T>? ?: run {
-            if (inFlight.size >= MAX_DETACHED) return null
+            // Only user-folder work can stall, so only it is capped: bundled assets must keep
+            // playing however many folder reads are stuck.
+            if (capped && inFlight.keys.count { it in cappedKeys } >= MAX_DETACHED) throw NoCapacity()
+            if (capped) cappedKeys += key
             detached.async { block() }.also { d ->
                 inFlight[key] = d
-                d.invokeOnCompletion { scope.launch { if (inFlight[key] === d) inFlight.remove(key) } }
+                d.invokeOnCompletion { scope.launch { if (inFlight[key] === d) { inFlight.remove(key); cappedKeys.remove(key) } } }
             }
         }
         return withTimeoutOrNull(LOAD_TIMEOUT_MS) { job.await() }
@@ -286,7 +305,7 @@ class PlaybackController(
         private const val USER_INDEX_WAIT_MS = 3_000L
         /** Reading a preset's text or texture paths longer than this counts as a failed load. */
         const val LOAD_TIMEOUT_MS = 10_000L
-        /** Distinct provider operations allowed in flight at once; beyond that a load fails fast. */
+        /** Distinct user-folder operations allowed in flight at once; beyond that a preset is skipped. */
         const val MAX_DETACHED = 4
     }
 }

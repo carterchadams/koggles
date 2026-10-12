@@ -187,11 +187,18 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
         cursor = history.size - 1
     }
 
-    fun onLoadFailed(requestId: Long): PlayRequest? {
+    /**
+     * The latest request's load failed: pick again. [markBroken] = false skips the preset for now
+     * without excluding it for the session (it was never attempted: no capacity for its folder's
+     * reads); the consecutive-failure bound still applies, so a saturated folder can't spin.
+     */
+    fun onLoadFailed(requestId: Long, markBroken: Boolean = true): PlayRequest? {
         val r = latest?.takeIf { it.requestId == requestId } ?: return null
         val target = r.target as? Target.Preset ?: return null
-        broken += target.ref.key
-        recompute()
+        if (markBroken) {
+            broken += target.ref.key
+            recompute()
+        }
         consecutiveFailures++
         if (consecutiveFailures >= FAILURE_BOUND) return issueNormal(null)
         return if (r.kind == Kind.Interstitial) issueNormal(eligibleDestination())

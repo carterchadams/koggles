@@ -418,11 +418,11 @@ class PlaybackControllerTest {
 
     /** Detached provider work must not grow without bound: duplicates coalesce, distinct stalls are capped. */
     @Test fun repeatedSelectionOfStalledPresets_coalescesAndBoundsDetachedWork() = runTest {
-        val big = flatCatalog(12)
-        libState.value = state(ready = true, cat = big)
+        val big = catalogOf(pack("bundled:p", "p0.milk"), pack("user:u", *(0..9).map { "u$it.milk" }.toTypedArray()))
+        libState.value = state(ready = true, cat = big, grant = true)
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") }
         val c = controller(); c.start(); advanceUntilIdle()
-        val first = loadedKey(sink.loads().single())
-        val stalled = keysOf(big).filter { it != first }.take(8)
+        val stalled = (0..7).map { "user:u/u$it.milk" }
         blocking += stalled
         repeat(5) { c.select(stalled[0]); runCurrent() } // the same stalled preset, five times
         assertEquals("duplicate reads of one stalled preset coalesce", 1, readCalls[stalled[0]])
@@ -465,6 +465,31 @@ class PlaybackControllerTest {
         assertEquals("a new tree gets its own read", 2, readCalls[target])
         gates[target]!!.complete(Unit); advanceUntilIdle()
         assertEquals(target, loadedKey(sink.loads().last()))
+    }
+
+    /**
+     * Stalled user-folder reads must not take bundled playback down with them: bundled assets can't
+     * stall, so they are not subject to the cap, and a preset turned away for lack of capacity is
+     * not broken, only skipped.
+     */
+    @Test fun saturatedUserReads_bundledStillPlays_andRejectedPresetIsNotBroken() = runTest {
+        val cat = catalogOf(pack("bundled:p", "p0.milk", "p1.milk"), pack("user:u", "u0.milk", "u1.milk", "u2.milk", "u3.milk", "u4.milk", "u5.milk"))
+        libState.value = state(ready = true, cat = cat, grant = true)
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") }
+        val c = controller(); c.start(); advanceUntilIdle()
+        val users = (0..4).map { "user:u/u$it.milk" }
+        blocking += users
+        for (k in users.take(PlaybackController.MAX_DETACHED)) { c.select(k); runCurrent() } // capacity saturated
+        c.select(users[4]); runCurrent()
+        assertEquals("turned away, not read", null, readCalls[users[4]])
+        c.select("bundled:p/p1.milk"); runCurrent()
+        assertEquals("bundled playback continues under saturation", "bundled:p/p1.milk", loadedKey(sink.loads().last()))
+        blockRelease.countDown()
+        // The stalled reads wake on real IO threads; let them complete and leave the in-flight table.
+        repeat(25) { Thread.sleep(20); advanceUntilIdle() }
+        c.select(users[4]); runCurrent()
+        repeat(100) { if (loadedKey(sink.loads().last()) == users[4]) return@repeat; Thread.sleep(20); advanceUntilIdle() }
+        assertEquals("the rejected preset was not marked broken", users[4], loadedKey(sink.loads().last()))
     }
 
     /** The interstitial's visible duration starts when it is on screen, not when its load was issued. */
