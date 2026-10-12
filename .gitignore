@@ -10,3 +10,6 @@ captures/
 keystore.properties
 *.jks
 .superpowers/
+.tmp/
+docs/
+plans/

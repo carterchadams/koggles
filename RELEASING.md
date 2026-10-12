@@ -2,7 +2,6 @@
 
 A release is a signed APK on the repository's GitHub Releases page. It's produced by
 [`.github/workflows/release.yml`](.github/workflows/release.yml) when a version tag is pushed.
-The design and its review are in [`plans/RELEASE-HARDENING.md`](plans/RELEASE-HARDENING.md).
 
 ## Tags and versions
 
@@ -85,17 +84,12 @@ A dispatched run never publishes; only a tag push does.
 ## Publishing
 
 **Stop unless the MVP sign-off holds.** The workflow checks the build, not these. Every item must
-be true before you tag (`plans/RELEASE-HARDENING.md` R8, Blueprint Task 21 Step 8):
+be true before you tag:
 
-- every gate record in `docs/verification/` says PASS: G1–G4, including G2's physical-phone
-  matrix, G3's headset fit and G4's on-phone performance;
-- every row in `docs/verification/manual-checklist.md` says PASS, including the release-build
-  walk-through on a physical phone. Rows under "After publishing" are the exception: you check
-  them once the release exists;
-- every row in `docs/claude-response/2026-10-11-koggles-rulings-for-human.md` is resolved
-  (remediation R4);
-- the release-plan decisions H6 (protections) and H7 (licensing for public distribution) are
-  made;
+- the physical-phone checks are done and recorded: headset fit, rendering performance on the
+  phone, the audio sources against real apps, and the release-build walk-through;
+- the open product decisions are made (protections on the repo; licensing for public
+  distribution of projectM, the presets and the textures);
 - all automated suites are green, and a dry run of this exact commit passed.
 
 If anything is open, don't tag. Then, on an up-to-date `main`:
