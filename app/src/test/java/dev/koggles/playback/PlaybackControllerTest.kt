@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -70,7 +72,13 @@ class PlaybackControllerTest {
     private val sink = FakeSink()
     private val gates = HashMap<String, CompletableDeferred<Unit>>()
     private val failing = HashSet<String>()
+    /** Keys whose read blocks a real thread (a provider that never answers), until [blockRelease]. */
+    private val blocking = HashSet<String>()
+    private val blockRelease = java.util.concurrent.CountDownLatch(1)
+    @After fun releaseBlockedReads() = blockRelease.countDown()
+
     private val reader = PresetReader { ref: PresetRef ->
+        if (ref.key in blocking) withContext(Dispatchers.IO) { blockRelease.await() }
         gates[ref.key]?.await()
         if (ref.key in failing) throw IOException("unreadable ${ref.key}")
         "data:${ref.key}"
@@ -211,7 +219,7 @@ class PlaybackControllerTest {
         })
         c.start(); advanceUntilIdle()
         val before = sink.loads().size
-        c.select("user:u/u0.milk"); advanceUntilIdle()
+        c.select("user:u/u0.milk"); runCurrent() // revalidation in flight (not stalled past the deadline)
         assertEquals(1, hookCalls)
         assertEquals("no pick while the library is being revalidated", before, sink.loads().size)
         hook.complete(Unit); advanceUntilIdle()
@@ -338,6 +346,35 @@ class PlaybackControllerTest {
         val last = sink.loads().last()
         assertEquals(2, sink.loads().size)
         assertTrue("moved on from the stalled preset: $last", loadedKey(last) != target)
+    }
+
+    /**
+     * Cancellation can't interrupt a blocking content-provider read, so the deadline must not wait for
+     * the read to return: playback moves on at the deadline while the read is still stuck.
+     */
+    @Test fun blockingRead_doesNotHoldPlaybackPastTheDeadline() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        val target = keys.first { it != loadedKey(sink.loads().single()) }
+        blocking += target
+        c.select(target); runCurrent()
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        assertEquals(2, sink.loads().size)
+        assertTrue(loadedKey(sink.loads().last()) != target)
+    }
+
+    /** A stalled folder revalidation after a user-pack read failure must not hold playback either. */
+    @Test fun stalledRevalidation_doesNotHoldPlaybackPastTheDeadline() = runTest {
+        val withUser = catalogOf(pack("bundled:p", "p0.milk", "p1.milk"), pack("user:u", "u0.milk"))
+        libState.value = state(ready = true, cat = withUser, grant = true)
+        failing += "user:u/u0.milk"
+        settings.update { it.copy(lastPresetKey = "bundled:p/p0.milk") }
+        val c = controller(onUserReadFailure = { withContext(Dispatchers.IO) { blockRelease.await() } })
+        c.start(); advanceUntilIdle()
+        val before = sink.loads().size
+        c.select("user:u/u0.milk"); runCurrent()
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        assertEquals(before + 1, sink.loads().size)
+        assertTrue(loadedKey(sink.loads().last()).startsWith("bundled:"))
     }
 
     /** The interstitial's visible duration starts when it is on screen, not when its load was issued. */

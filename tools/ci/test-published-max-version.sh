@@ -15,6 +15,7 @@ if [ "\$1 \$2" = "release list" ]; then
   [ "\$mode" = none ] && exit 0
   [ "\$mode" = bad-tag ] && { printf 'v0.1.0\nnightly\n'; exit 0; }
   [ "\$mode" = tags-retained ] && { printf 'v0.1.0\n'; exit 0; }
+  [ "\$mode" = candidate-pushed ] && { printf 'v0.1.0\nv0.2.0\n'; exit 0; }
   printf 'v0.1.0\nv0.2.0\nv0.10.0\n'
   # Drafts (never shipped) are listed only when --exclude-drafts is missing.
   case " \$* " in *" --exclude-drafts "*) ;; *) printf 'v1.0.0\ndraft-junk\n' ;; esac
@@ -24,6 +25,8 @@ if [ "\$1 \$2" = "api" ] || [ "\$1" = "api" ]; then
   # Tags on the repo; a withdrawn release keeps its tag, so its versionCode stays reserved.
   [ "\$mode" = api-fails ] && { echo "HTTP 502" >&2; exit 1; }
   [ "\$mode" = tags-retained ] && { printf 'v0.1.0\nv0.2.0\n'; exit 0; }
+  # The candidate's own tag is already pushed when the workflow runs.
+  [ "\$mode" = candidate-pushed ] && { printf 'v0.1.0\nv0.2.0\nv0.3.0\n'; exit 0; }
   [ "\$mode" = none ] && exit 0
   printf 'v0.1.0\nv0.2.0\nv0.10.0\n'; exit 0
 fi
@@ -50,5 +53,8 @@ check list-fails list-fails fail
 check non-version-tag bad-tag fail
 check withdrawn-release-tag-kept tags-retained 200
 check tags-query-fails api-fails fail
+# The candidate tag must not reserve itself (else every release fails its own guard).
+EXCLUDE_TAG=v0.3.0 check candidate-tag-excluded candidate-pushed 200
+check candidate-tag-not-excluded candidate-pushed 300
 echo "published-max-version: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

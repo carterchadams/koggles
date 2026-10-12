@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import java.io.IOException
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -203,11 +205,7 @@ class PlaybackController(
                 Target.Idle -> if (fresh()) sink.loadIdle(id)
                 is Target.Preset -> {
                     val data = try {
-                        // A provider that never answers (a stalled cloud folder) would otherwise
-                        // stall playback: the timer events for the old preset are dropped as stale
-                        // while the new one never arrives.
-                        withTimeoutOrNull(LOAD_TIMEOUT_MS) { reader.read(target.ref) }
-                            ?: throw IOException("preset read timed out")
+                        bounded { reader.read(target.ref) } ?: throw IOException("preset read timed out")
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -215,14 +213,16 @@ class PlaybackController(
                             // The folder may be gone: let the library re-check it, and
                             // pick next only once the playlist has the result, so a lost folder
                             // can't burn through the failure bound.
-                            onUserReadFailure()
-                            applied.first { it === libraryState.value }
+                            bounded {
+                                onUserReadFailure()
+                                applied.first { it === libraryState.value }
+                            }
                         }
                         if (fresh()) playlist.onLoadFailed(id)?.let(::process)
                         return@launch
                     }
                     if (!fresh()) return@launch
-                    val paths = withTimeoutOrNull(LOAD_TIMEOUT_MS) { texturePaths(target.ref.packId) }
+                    val paths = bounded { texturePaths(target.ref.packId) }
                     if (paths == null) {
                         if (fresh()) playlist.onLoadFailed(id)?.let(::process)
                         return@launch
@@ -231,6 +231,23 @@ class PlaybackController(
                     sink.load(data, id, smooth, paths)
                 }
             }
+        }
+    }
+
+    /**
+     * Runs [block] in its own job and waits at most [LOAD_TIMEOUT_MS] for its result, else null. A
+     * provider that never answers (a stalled cloud folder) would otherwise stall playback: timer
+     * events for the preset still on screen are dropped as stale while the new one never arrives.
+     * Cancellation can't interrupt a blocking content-provider read, so the work is detached rather
+     * than cancelled: a late result is simply dropped. Exceptions from [block] propagate.
+     */
+    private suspend fun <T> bounded(block: suspend () -> T): T? {
+        val job = scope.async(SupervisorJob(scope.coroutineContext[Job])) { block() }
+        return try {
+            withTimeoutOrNull(LOAD_TIMEOUT_MS) { job.await() } ?: run { job.cancel(); null }
+        } catch (e: CancellationException) {
+            job.cancel()
+            throw e
         }
     }
 
