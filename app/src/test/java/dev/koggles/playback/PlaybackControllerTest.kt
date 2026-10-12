@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -78,7 +80,9 @@ class PlaybackControllerTest {
     private val blockRelease = java.util.concurrent.CountDownLatch(1)
     @After fun releaseBlockedReads() = blockRelease.countDown()
 
+    private val readCalls = HashMap<String, Int>()
     private val reader = PresetReader { ref: PresetRef ->
+        readCalls.merge(ref.key, 1, Int::plus)
         if (ref.key in blocking) withContext(Dispatchers.IO) { blockRelease.await() }
         gates[ref.key]?.await()
         if (ref.key in failing) throw IOException("unreadable ${ref.key}")
@@ -410,6 +414,36 @@ class PlaybackControllerTest {
         assertTrue("the revalidation ran to completion", completed)
     }
 
+    /** Detached provider work must not grow without bound: duplicates coalesce, distinct stalls are capped. */
+    @Test fun repeatedSelectionOfStalledPresets_coalescesAndBoundsDetachedWork() = runTest {
+        val big = flatCatalog(12)
+        libState.value = state(ready = true, cat = big)
+        val c = controller(); c.start(); advanceUntilIdle()
+        val first = loadedKey(sink.loads().single())
+        val stalled = keysOf(big).filter { it != first }.take(8)
+        blocking += stalled
+        repeat(5) { c.select(stalled[0]); runCurrent() } // the same stalled preset, five times
+        assertEquals("duplicate reads of one stalled preset coalesce", 1, readCalls[stalled[0]])
+        for (k in stalled.drop(1)) { c.select(k); runCurrent() } // seven more distinct stalled presets
+        val started = stalled.count { (readCalls[it] ?: 0) > 0 }
+        assertTrue("distinct stalled reads are capped at ${PlaybackController.MAX_DETACHED}, got $started",
+            started <= PlaybackController.MAX_DETACHED)
+        advanceTimeBy(PlaybackController.LOAD_TIMEOUT_MS + 100); runCurrent()
+        assertTrue("playback moved on", loadedKey(sink.loads().last()) !in stalled)
+    }
+
+    /** Successful loads leave nothing behind in the detached-work supervisor. */
+    @Test fun successfulLoads_leaveNoLingeringDetachedJobs() = runTest {
+        val c = controller(); c.start(); advanceUntilIdle()
+        repeat(6) { c.next(); advanceUntilIdle() }
+        // The detached-work supervisor is the scope's only CompletableJob child (the controller's flow
+        // collectors are plain coroutines); after successful loads it must hold nothing.
+        val root = scopes.last().coroutineContext[Job]!!
+        val supervisors = root.children.filterIsInstance<CompletableJob>().toList()
+        assertEquals("exactly one detached-work supervisor", 1, supervisors.size)
+        assertEquals("lingering detached jobs after successful loads", 0, supervisors.single().children.count())
+    }
+
     /** The interstitial's visible duration starts when it is on screen, not when its load was issued. */
     @Test fun interstitialTimer_startsAtLoadedAck_notAtIssue() = runTest {
         val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "!t/t0.milk"))
@@ -501,7 +535,7 @@ class PlaybackControllerTest {
         c.start(); advanceUntilIdle(); sink.calls.clear()
         gateFirst = true
         c.select(keys[1]); runCurrent()
-        c.select(keys[2]); advanceUntilIdle()
+        c.select(keys[2]); runCurrent() // joins the pack's in-flight texture lookup (not stalled past the deadline)
         gate.complete(Unit); advanceUntilIdle()
         assertEquals(listOf(keys[2]), sink.loads().map(::loadedKey))
     }

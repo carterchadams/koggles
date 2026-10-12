@@ -8,6 +8,7 @@ import dev.koggles.settings.Settings
 import dev.koggles.settings.SettingsValues
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -205,7 +206,8 @@ class PlaybackController(
                 Target.Idle -> if (fresh()) sink.loadIdle(id)
                 is Target.Preset -> {
                     val data = try {
-                        bounded { reader.read(target.ref) } ?: throw IOException("preset read timed out")
+                        bounded("read:${target.ref.key}") { reader.read(target.ref) }
+                            ?: throw IOException("preset read timed out or no capacity")
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -213,7 +215,7 @@ class PlaybackController(
                             // The folder may be gone: let the library re-check it, and
                             // pick next only once the playlist has the result, so a lost folder
                             // can't burn through the failure bound.
-                            bounded {
+                            bounded("revalidate") {
                                 onUserReadFailure()
                                 applied.first { it === libraryState.value }
                             }
@@ -222,7 +224,7 @@ class PlaybackController(
                         return@launch
                     }
                     if (!fresh()) return@launch
-                    val paths = bounded { texturePaths(target.ref.packId) }
+                    val paths = bounded("textures:${target.ref.packId}") { texturePaths(target.ref.packId) }
                     if (paths == null) {
                         if (fresh()) playlist.onLoadFailed(id)?.let(::process)
                         return@launch
@@ -234,17 +236,31 @@ class PlaybackController(
         }
     }
 
+    /** Provider work (reads, texture paths, revalidation) outlives the load that asked for it. */
+    private val detached = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
+
+    /** In-flight provider operations by key; a duplicate request joins the one already running. */
+    private val inFlight = HashMap<String, Deferred<*>>()
+
     /**
-     * Runs [block] in its own job and waits at most [LOAD_TIMEOUT_MS] for its result, else null. A
-     * provider that never answers (a stalled cloud folder) would otherwise stall playback: timer
-     * events for the preset still on screen are dropped as stale while the new one never arrives.
-     * The wait is abandoned, never the work: cancellation can't interrupt a blocking
+     * Runs [block] once per [key] on [detached] and waits at most [LOAD_TIMEOUT_MS] for its result,
+     * else null. A provider that never answers (a stalled cloud folder) would otherwise stall
+     * playback: timer events for the preset still on screen are dropped as stale while the new one
+     * never arrives. The wait is abandoned, never the work: cancellation can't interrupt a blocking
      * content-provider read, and cancelling a folder revalidation mid-way would leave the library
-     * half updated. A late result is dropped, since only the current load job talks to the sink.
-     * Exceptions from [block] propagate while the wait is still on.
+     * half updated. Work can't pile up either: the same key joins the operation already running, and
+     * at most [MAX_DETACHED] distinct operations run at once, beyond which a load fails fast. A late
+     * result is dropped, since only the current load job talks to the sink. Main thread only.
      */
-    private suspend fun <T> bounded(block: suspend () -> T): T? {
-        val job = scope.async(SupervisorJob(scope.coroutineContext[Job])) { block() }
+    private suspend fun <T> bounded(key: String, block: suspend () -> T): T? {
+        @Suppress("UNCHECKED_CAST")
+        val job = inFlight[key] as Deferred<T>? ?: run {
+            if (inFlight.size >= MAX_DETACHED) return null
+            detached.async { block() }.also { d ->
+                inFlight[key] = d
+                d.invokeOnCompletion { scope.launch { if (inFlight[key] === d) inFlight.remove(key) } }
+            }
+        }
         return withTimeoutOrNull(LOAD_TIMEOUT_MS) { job.await() }
     }
 
@@ -265,5 +281,7 @@ class PlaybackController(
         private const val USER_INDEX_WAIT_MS = 3_000L
         /** Reading a preset's text or texture paths longer than this counts as a failed load. */
         const val LOAD_TIMEOUT_MS = 10_000L
+        /** Distinct provider operations allowed in flight at once; beyond that a load fails fast. */
+        const val MAX_DETACHED = 4
     }
 }
