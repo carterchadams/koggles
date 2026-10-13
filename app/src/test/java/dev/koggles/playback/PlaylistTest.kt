@@ -27,7 +27,6 @@ class PlaylistTest {
 
     private fun assertIdle(r: PlayRequest) {
         assertEquals(Target.Idle, r.target)
-        assertEquals(Kind.Normal, r.kind)
         assertEquals(notice, r.notice)
     }
 
@@ -38,15 +37,10 @@ class PlaylistTest {
         return presetKey(r)
     }
 
-    /** ▶ next, riding through any interstitial; returns the Normal destination. */
+    /** ▶ next, reported loaded. */
     private fun Playlist.advance(): PlayRequest {
-        var r = next()
+        val r = next()
         onLoaded(r.requestId)
-        if (r.kind == Kind.Interstitial) {
-            r = onInterstitialElapsed(r.requestId)!!
-            onLoaded(r.requestId)
-        }
-        assertEquals(Kind.Normal, r.kind)
         return r
     }
 
@@ -179,7 +173,6 @@ class PlaylistTest {
                 addAll(loaded.asReversed().filter { it != current }.distinct().take(k))
             }
             val r = p.random()
-            assertEquals(Kind.Normal, r.kind)
             val key = presetKey(r)
             assertFalse("n=$n picked $key, excluded $excluded", key in excluded)
             p.onLoaded(r.requestId)
@@ -313,7 +306,6 @@ class PlaylistTest {
         val p = playlist(cat)
         val r = p.select(bad)!!
         val retry = p.onLoadFailed(r.requestId)!!
-        assertEquals(Kind.Normal, retry.kind)
         assertNotEquals(bad, presetKey(retry))
         p.onLoaded(retry.requestId)
         repeat(20) {
@@ -346,12 +338,11 @@ class PlaylistTest {
     }
 
     @Test fun staleIds_ignored() {
-        val p = playlist(flatCatalog(5)) { it.copy(interstitials = false) }
+        val p = playlist(flatCatalog(5))
         val r1 = p.next()
         val r2 = p.next()
         val current = p.current
         assertNull(p.onLoadFailed(r1.requestId))
-        assertNull(p.onInterstitialElapsed(r1.requestId))
         p.onLoaded(r1.requestId)
         assertEquals(r2.requestId, p.latestRequestId)
         assertEquals(current, p.current)
@@ -374,9 +365,8 @@ class PlaylistTest {
 
     @Test fun start_lastKeyMissing_picksNext() {
         val cat = flatCatalog(4)
-        val p = playlist(cat) { it.copy(interstitials = true) }
+        val p = playlist(cat)
         val r = p.start("user:gone/x.milk")
-        assertEquals(Kind.Normal, r.kind)
         assertTrue(presetKey(r) in keysOf(cat))
         val q = playlist(cat, configure = { it.copy(skipped = setOf(keysOf(cat)[1])) }).start(keysOf(cat)[1])
         assertNotEquals(keysOf(cat)[1], presetKey(q))
@@ -387,7 +377,6 @@ class PlaylistTest {
         val p = playlist(cat)
         val r = p.start(keysOf(cat)[3])
         assertEquals(keysOf(cat)[3], presetKey(r))
-        assertEquals(Kind.Normal, r.kind)
         assertEquals(keysOf(cat)[3], p.current?.key)
     }
 
@@ -415,22 +404,18 @@ class PlaylistTest {
         assertEquals(second + 1, p.next().requestId) // consecutive again afterwards
     }
 
-    /** A reissue keeps target, kind and the pending interstitial, under a new id above the floor. */
-    @Test fun reissueLatest_keepsTargetKindAndPendingInterstitial() {
+    /** A reissue keeps the target under a new id above the floor; [current] is unchanged. */
+    @Test fun reissueLatest_keepsTargetAndHistoryPosition() {
         var floor = 0L
-        val p = Playlist(Random(42)) { floor }.also { it.update(inputs(mixed).copy(interstitials = true)) }
+        val p = Playlist(Random(42)) { floor }.also { it.update(inputs(mixed)) }
         val r = p.next()
-        assertEquals(Kind.Interstitial, r.kind)
         floor = r.requestId + 1_000
         val again = p.reissueLatest()!!
         assertTrue(again.requestId > floor)
         assertEquals(r.target, again.target)
-        assertEquals(r.kind, again.kind)
-        assertEquals(again, p.pendingInterstitial) // re-keyed: its timer elapses under the new id
+        assertEquals(r.notice, again.notice)
         assertEquals(again.requestId, p.latestRequestId)
-        val d = p.onInterstitialElapsed(again.requestId)!!
-        assertEquals(Kind.Normal, d.kind)
-        assertFalse(presetKey(d) in transitions)
+        assertEquals(presetKey(r), p.current?.key)
     }
 
     /** A reissued history step keeps the history walk (no duplicate entry). */
@@ -448,154 +433,25 @@ class PlaylistTest {
         assertEquals(a, presetKey(p.previous()!!))
     }
 
-    // ---- Interstitials ----
+    // ---- Transition presets never play; skip ----
 
     private val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "p2.milk", "p3.milk", "p4.milk", "!t/t0.milk", "!t/t1.milk"))
     private val transitions = setOf("bundled:a/!t/t0.milk", "bundled:a/!t/t1.milk")
-    private fun withInterstitials(seed: Int = 42) = playlist(mixed, seed) { it.copy(interstitials = true) }
-
-    @Test fun next_withInterstitials_interstitialThenDestination() {
-        val p = withInterstitials()
-        val r = p.next()
-        assertEquals(Kind.Interstitial, r.kind)
-        assertTrue(presetKey(r) in transitions)
-        assertEquals(r, p.pendingInterstitial)
-        p.onLoaded(r.requestId)
-        val d = p.onInterstitialElapsed(r.requestId)!!
-        assertEquals(Kind.Normal, d.kind)
-        assertFalse(presetKey(d) in transitions)
-        assertNull(p.pendingInterstitial)
-        p.onLoaded(d.requestId)
-        assertNull(p.previous()) // the interstitial is not history
-    }
-
-    @Test fun nextDuringInterstitial_goesToPendingDestination() {
-        val twin = withInterstitials()
-        val destination = presetKey(twin.onInterstitialElapsed(twin.next().requestId)!!)
-        val p = withInterstitials()
-        val r = p.next()
-        p.onLoaded(r.requestId)
-        val n = p.next()
-        assertEquals(Kind.Normal, n.kind)
-        assertEquals(destination, presetKey(n))
-        assertNull(p.pendingInterstitial)
-        assertNull(p.onInterstitialElapsed(r.requestId))
-    }
-
-    @Test fun selectDuringInterstitial_cancels() {
-        val p = withInterstitials()
-        val r = p.next()
-        val s = p.select("bundled:a/p3.milk")!!
-        assertEquals(Kind.Normal, s.kind)
-        assertNull(p.pendingInterstitial)
-        assertNull(p.onInterstitialElapsed(r.requestId))
-    }
-
-    @Test fun previous_neverInterstitial() {
-        val p = withInterstitials()
-        p.play { select("bundled:a/p0.milk")!! }
-        p.play { select("bundled:a/p1.milk")!! }
-        val r = p.next()
-        val back = p.previous()!!
-        assertEquals(Kind.Normal, back.kind)
-        assertEquals("bundled:a/p1.milk", presetKey(back))
-        assertNull(p.pendingInterstitial)
-        assertNull(p.onInterstitialElapsed(r.requestId))
-    }
-
-    @Test fun random_neverInterstitial() {
-        val p = withInterstitials()
-        val r = p.next()
-        assertEquals(Kind.Interstitial, r.kind)
-        repeat(20) {
-            val x = p.random()
-            assertEquals(Kind.Normal, x.kind)
-            assertFalse(presetKey(x) in transitions)
-            assertNull(p.pendingInterstitial)
-            p.onLoaded(x.requestId)
-        }
-    }
-
-    @Test fun interstitialFailed_goesToDestination() {
-        val twin = withInterstitials()
-        val destination = presetKey(twin.onInterstitialElapsed(twin.next().requestId)!!)
-        val p = withInterstitials()
-        val r = p.next()
-        val failedTransition = presetKey(r)
-        val d = p.onLoadFailed(r.requestId)!!
-        assertEquals(Kind.Normal, d.kind)
-        assertEquals(destination, presetKey(d))
-        assertNull(p.pendingInterstitial)
-        p.onLoaded(d.requestId)
-        repeat(10) {
-            val i = p.next()
-            assertEquals(Kind.Interstitial, i.kind)
-            assertNotEquals(failedTransition, presetKey(i))
-            p.onLoaded(i.requestId)
-            p.onLoaded(p.onInterstitialElapsed(i.requestId)!!.requestId)
-        }
-    }
-
-    @Test fun pendingDestinationIneligible_picksNew() {
-        val twin = withInterstitials()
-        val destination = presetKey(twin.onInterstitialElapsed(twin.next().requestId)!!)
-        val p = withInterstitials()
-        val r = p.next()
-        p.update(inputs(mixed, skipped = setOf(destination), interstitials = true))
-        val d = p.onInterstitialElapsed(r.requestId)!!
-        assertEquals(Kind.Normal, d.kind)
-        assertNotEquals(destination, presetKey(d))
-        assertFalse(presetKey(d) in transitions)
-    }
-
-    @Test fun noTransitionCandidates_noInterstitial() {
-        val p = playlist(flatCatalog(4)) { it.copy(interstitials = true) }
-        repeat(5) { assertEquals(Kind.Normal, p.advance().kind); assertNull(p.pendingInterstitial) }
-        val split = catalogOf(pack("bundled:a", "p0.milk", "p1.milk"), pack("user:t", "!t/t0.milk"))
-        val q = playlist(split) { it.copy(interstitials = true, disabledPacks = setOf("user:t")) }
-        repeat(5) { assertEquals(Kind.Normal, q.next().kind) }
-        val s = playlist(mixed) { it.copy(interstitials = true, skipped = transitions) }
-        repeat(5) { assertEquals(Kind.Normal, s.next().kind) }
-    }
-
-    @Test fun skip_marksAndAdvancesWithInterstitial() {
-        val p = withInterstitials()
+    /** Skip: excluded at once (before the persisted set arrives), from ▶ next and 🔀 alike; eligible again once un-skipped. */
+    @Test fun skip_excludesAtOnce_untilUnskipped() {
+        val p = playlist(mixed)
         val skipped = "bundled:a/p0.milk"
         p.play { select(skipped)!! }
         val s = p.skipCurrent()
-        assertEquals(Kind.Interstitial, s.kind)
+        assertNotEquals(skipped, presetKey(s))
         p.onLoaded(s.requestId)
-        val d = p.onInterstitialElapsed(s.requestId)!!
-        assertNotEquals(skipped, presetKey(d))
-        p.onLoaded(d.requestId)
         // Excluded at once, before the persisted skip set arrives through update.
         repeat(12) { assertNotEquals(skipped, presetKey(p.advance())) }
         repeat(12) { assertNotEquals(skipped, p.play { random() }) }
-        p.update(inputs(mixed, skipped = setOf(skipped), interstitials = true))
+        p.update(inputs(mixed, skipped = setOf(skipped)))
         repeat(12) { assertNotEquals(skipped, presetKey(p.advance())) }
         // Un-skipping (the persisted set drops it) makes it eligible again.
-        p.update(inputs(mixed, interstitials = true))
+        p.update(inputs(mixed))
         assertTrue(skipped in p.reachable())
-    }
-
-    @Test fun cancelledInterstitial_returnsDestinationToCycle() {
-        val normals = (0..4).map { "bundled:a/p$it.milk" }.toSet()
-        for (seed in 0 until 20) {
-            val p = withInterstitials(seed)
-            val first = p.next() // interstitial; its destination is reserved
-            p.onLoaded(first.requestId)
-            // Navigation outside the candidate scope cancels the interstitial.
-            val sel = p.select("bundled:a/!t/t0.milk")!!
-            p.onLoaded(sel.requestId)
-            val reached = mutableListOf<String>()
-            repeat(normals.size) {
-                val r = p.next()
-                p.onLoaded(r.requestId)
-                val d = if (r.kind == Kind.Interstitial) p.onInterstitialElapsed(r.requestId)!! else r
-                p.onLoaded(d.requestId)
-                reached += presetKey(d)
-            }
-            assertEquals("seed $seed: every candidate once before the cycle refills", normals, reached.toSet())
-        }
     }
 }

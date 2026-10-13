@@ -107,7 +107,7 @@ class GrantLossIntegrationTest {
             libraryState = repo.state,
             onUserReadFailure = { repo.revalidate() },
         )
-        scope.launch { settings.update { it.copy(scope = scopeSetting, interstitials = false) } }
+        scope.launch { settings.update { it.copy(scope = scopeSetting) } }
         advanceUntilIdle()
         assertTrue("user packs indexed", repo.state.value.catalog.pack("user:Mine") != null)
         controller.start(); advanceUntilIdle()

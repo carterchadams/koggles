@@ -83,12 +83,12 @@ class PresetProbe private constructor(private val textures: List<String>) : Auto
                     s == AudioState.Active && AppGraph.renderCommands.attachedHandle != 0L
                 }) { "app not ready" }
                 check(waitFor(30_000) { AppGraph.libraryRepo.state.value.bundledTextureDir != null }) { "textures not ready" }
-                // Playback's own loads outrank loads from elsewhere (it allocates ids above the renderer's): its startup or
-                // an interstitial ending would supersede a probe load in flight. Wait until it is idle (latest
-                // load applied, no interstitial pending); the probing tests lock playback, so nothing new starts.
+                // Playback's own loads outrank loads from elsewhere (it allocates ids above the renderer's): its
+                // startup would supersede a probe load in flight. Wait until it is idle (latest load applied); the
+                // probing tests lock playback, so nothing new starts.
                 check(waitFor(30_000) {
                     val id = AppGraph.playback.nowPlayingRequestId()
-                    id > 0 && AppGraph.renderCommands.lastAppliedRequestId >= id && !AppGraph.playback.nowPlaying.value.interstitial
+                    id > 0 && AppGraph.renderCommands.lastAppliedRequestId >= id
                 }) { "playback did not settle" }
                 // A newly attached renderer replays the last preset load; let it finish before probing,
                 // so its messages can't land in the first probe's window.

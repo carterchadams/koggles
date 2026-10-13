@@ -331,18 +331,6 @@ class PlaybackControllerTest {
         assertTrue("hard cut applies to one load only", sink.loads().last().contains(",true,"))
     }
 
-    @Test fun interstitialTimerElapses_loadsDestination() = runTest {
-        val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "!t/t0.milk"))
-        libState.value = state(ready = true, cat = mixed)
-        val c = controller(); c.start(); advanceUntilIdle()
-        c.next(); runCurrent()
-        assertTrue(loadedKey(sink.loads().last()).contains("!t/"))
-        assertTrue(c.nowPlaying.value.interstitial)
-        c.onPresetLoaded(c.nowPlayingRequestId()) // on screen now
-        advanceTimeBy(4_100); runCurrent()
-        assertFalse(loadedKey(sink.loads().last()).contains("!t/"))
-    }
-
     /** A preset read that never completes (a stalled cloud provider) must not stall playback. */
     @Test fun stalledRead_timesOut_andPlaybackMovesOn() = runTest {
         val c = controller(); c.start(); advanceUntilIdle()
@@ -490,36 +478,6 @@ class PlaybackControllerTest {
         c.select(users[4]); runCurrent()
         repeat(100) { if (loadedKey(sink.loads().last()) == users[4]) return@repeat; Thread.sleep(20); advanceUntilIdle() }
         assertEquals("the rejected preset was not marked broken", users[4], loadedKey(sink.loads().last()))
-    }
-
-    /** The interstitial's visible duration starts when it is on screen, not when its load was issued. */
-    @Test fun interstitialTimer_startsAtLoadedAck_notAtIssue() = runTest {
-        val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "!t/t0.milk"))
-        libState.value = state(ready = true, cat = mixed)
-        val c = controller(); c.start(); advanceUntilIdle()
-        gates["bundled:a/!t/t0.milk"] = CompletableDeferred()
-        c.next(); runCurrent()
-        assertTrue(c.nowPlaying.value.interstitial)
-        advanceTimeBy(8_000); runCurrent() // slow load: the interstitial is not on screen yet
-        assertTrue("destination issued before the interstitial was shown", c.nowPlaying.value.interstitial)
-        gates["bundled:a/!t/t0.milk"]!!.complete(Unit); runCurrent()
-        val shown = c.nowPlayingRequestId()
-        c.onPresetLoaded(shown)
-        advanceTimeBy(3_900); runCurrent()
-        assertTrue(c.nowPlaying.value.interstitial)
-        advanceTimeBy(200); runCurrent()
-        assertFalse(c.nowPlaying.value.interstitial)
-    }
-
-    @Test fun navigationCancelsInterstitialTimer() = runTest {
-        val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "p2.milk", "!t/t0.milk"))
-        libState.value = state(ready = true, cat = mixed)
-        val c = controller(); c.start(); advanceUntilIdle()
-        c.next(); runCurrent()
-        c.select("bundled:a/p2.milk"); runCurrent()
-        val count = sink.loads().size
-        advanceTimeBy(10_000); runCurrent()
-        assertEquals(count, sink.loads().size)
     }
 
     @Test fun readThrows_treatedAsFailure() = runTest {

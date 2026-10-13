@@ -61,12 +61,4 @@ internal fun LazyListScope.playbackSection(v: SettingsValues, current: PresetRef
             )
         }
     }
-    item(key = "playback-interstitials") {
-        SwitchRow("Transition interstitials", v.interstitials) { on -> actions.updateSettings { it.copy(interstitials = on) } }
-        if (v.interstitials) {
-            StepSlider("Interstitial", v.interstitialSec.toFloat(), 2f..10f, 1f, { "${it.toInt()} s" }) { x ->
-                actions.updateSettings { it.copy(interstitialSec = x.toInt()) }
-            }
-        }
-    }
 }

@@ -11,7 +11,6 @@ data class PlaylistInputs(
     val favorites: Set<String>,
     val skipped: Set<String>,
     val scope: Scope,
-    val interstitials: Boolean,
 )
 
 sealed interface Target {
@@ -19,9 +18,7 @@ sealed interface Target {
     data object Idle : Target
 }
 
-enum class Kind { Normal, Interstitial }
-
-data class PlayRequest(val requestId: Long, val target: Target, val kind: Kind, val notice: String? = null)
+data class PlayRequest(val requestId: Long, val target: Target, val notice: String? = null)
 
 /** Notice carried by every [Target.Idle] request (Global Constraints, exact copy). */
 const val EMPTY_SCOPE_NOTICE = "No playable presets in this scope"
@@ -30,19 +27,18 @@ const val EMPTY_SCOPE_NOTICE = "No playable presets in this scope"
  * Rotation rules. Pure and single-threaded: callers serialise access.
  *
  * - Candidates: presets of enabled packs inside the scope (a folder scope includes its
- *   subfolders), minus skipped, broken and transition presets. Interstitial candidates are the
- *   transition presets of enabled packs, in any scope, minus skipped and broken ones.
- * - [current] is the preset of the most recently issued request (an interstitial included), or
- *   null after an [Target.Idle] request. It is not cleared when its pack disappears.
- * - Every issued request supersedes the previous one and cancels any pending interstitial;
- *   callbacks carrying older ids are ignored.
+ *   subfolders), minus skipped, broken and transition presets. Transition presets (a path segment
+ *   starting with `!`) never play: the interstitial feature that used them was removed
+ *   (the author, 2026-10-13: they showed seconds of black between presets).
+ * - [current] is the preset of the most recently issued request, or null after an
+ *   [Target.Idle] request. It is not cleared when its pack disappears.
+ * - Every issued request supersedes the previous one; callbacks carrying older ids are ignored.
  */
 class Playlist(private val random: Random, private val idFloor: () -> Long = { 0L }) {
 
     private var inputs: PlaylistInputs? = null
     private var candidates: List<PresetRef> = emptyList()
     private var candidateKeys: Set<String> = emptySet()
-    private var transitions: List<PresetRef> = emptyList()
 
     /** Broken this session. */
     private val broken = HashSet<String>()
@@ -65,13 +61,9 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
     /** For the latest request: the history index it came from via [previous], else -1. */
     private var latestHistoryIndex = -1
 
-    private var pendingDestination: PresetRef? = null
     private var consecutiveFailures = 0
 
     var current: PresetRef? = null
-        private set
-
-    var pendingInterstitial: PlayRequest? = null
         private set
 
     val latestRequestId: Long get() = latest?.requestId ?: 0L
@@ -82,17 +74,13 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
         recompute()
     }
 
-    /** Plays [lastKey] if it is a candidate, else the next cycle pick. Never an interstitial. */
+    /** Plays [lastKey] if it is a candidate, else the next cycle pick. */
     fun start(lastKey: String?): PlayRequest {
         val ref = lastKey?.takeIf { it in candidateKeys }?.let { inputs?.catalog?.byKey(it) }
-        return issueNormal(ref ?: pickFromCycle())
+        return issue(ref ?: pickFromCycle())
     }
 
-    fun next(): PlayRequest {
-        if (pendingInterstitial != null) return issueNormal(eligibleDestination())
-        val destination = pickFromCycle() ?: return issueNormal(null)
-        return issueWithInterstitial(destination)
-    }
+    fun next(): PlayRequest = issue(pickFromCycle())
 
     /** The newest eligible history entry other than [current]; null (and no change) if none. */
     fun previous(): PlayRequest? {
@@ -102,7 +90,7 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
             val key = history[i]
             if (key != currentKey && key in candidateKeys) {
                 val ref = inputs?.catalog?.byKey(key) ?: return null
-                val r = issueNormal(ref)
+                val r = issue(ref)
                 latestHistoryIndex = i
                 cursor = i
                 return r
@@ -114,7 +102,7 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
 
     fun random(): PlayRequest {
         val n = candidates.size
-        if (n <= 1) return issueNormal(candidates.firstOrNull())
+        if (n <= 1) return issue(candidates.firstOrNull())
         val currentKey = current?.key
         val k = minOf(10, n - 2)
         val excluded = HashSet<String>()
@@ -127,13 +115,13 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
         }
         excluded += recent
         val pool = candidates.filter { it.key !in excluded }
-        return issueNormal(pool[random.nextInt(pool.size)])
+        return issue(pool[random.nextInt(pool.size)])
     }
 
     /** Plays any known preset, eligible or not (an explicit user choice); null if unknown. */
     fun select(key: String): PlayRequest? {
         val ref = inputs?.catalog?.byKey(key) ?: return null
-        return issueNormal(ref)
+        return issue(ref)
     }
 
     /**
@@ -151,15 +139,13 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
     /**
      * The latest request again under a new id above the floor: for when another loader's request
      * superseded it before it was shown and then failed, leaving an older preset on screen whose
-     * switch events would be stale. Keeps its target and kind, a
-     * pending interstitial (re-keyed to the new id, so its timer matches), the pending destination and
-     * the history position it came from; [current] is unchanged.
+     * switch events would be stale. Keeps its target, its notice and the history position it came
+     * from; [current] is unchanged.
      */
     fun reissueLatest(): PlayRequest? {
         val r = latest ?: return null
         val again = r.copy(requestId = allocateId())
         latest = again
-        if (pendingInterstitial?.requestId == r.requestId) pendingInterstitial = again
         return again
     }
 
@@ -177,7 +163,6 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
         val r = latest?.takeIf { it.requestId == requestId } ?: return
         consecutiveFailures = 0
         val target = r.target as? Target.Preset ?: return
-        if (r.kind != Kind.Normal) return
         if (latestHistoryIndex >= 0) {
             cursor = latestHistoryIndex
             return
@@ -200,14 +185,8 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
             recompute()
         }
         consecutiveFailures++
-        if (consecutiveFailures >= FAILURE_BOUND) return issueNormal(null)
-        return if (r.kind == Kind.Interstitial) issueNormal(eligibleDestination())
-        else issueNormal(pickFromCycle())
-    }
-
-    fun onInterstitialElapsed(requestId: Long): PlayRequest? {
-        if (pendingInterstitial?.requestId != requestId) return null
-        return issueNormal(eligibleDestination())
+        if (consecutiveFailures >= FAILURE_BOUND) return issue(null)
+        return issue(pickFromCycle())
     }
 
     // ---- internals ----
@@ -220,7 +199,6 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
         val scoped = playable.filter { inScope(it, inp) }
         // Human decision Q1: a Favorites scope with nothing playable acts as the default scope.
         val newCandidates = if (scoped.isEmpty() && inp.scope == Scope.Favorites) playable else scoped
-        transitions = enabled.filter { it.isTransition && !excluded(it) }
         val oldKeys = candidateKeys
         candidates = newCandidates
         candidateKeys = newCandidates.mapTo(HashSet()) { it.key }
@@ -276,39 +254,17 @@ class Playlist(private val random: Random, private val idFloor: () -> Long = { 0
         }
     }
 
-    /** The pending destination if it is still a candidate, else a fresh cycle pick. */
-    private fun eligibleDestination(): PresetRef? =
-        pendingDestination?.takeIf { it.key in candidateKeys } ?: pickFromCycle()
-
-    private fun issueWithInterstitial(destination: PresetRef): PlayRequest {
-        if (inputs?.interstitials != true || transitions.isEmpty()) return issueNormal(destination)
-        val via = transitions[random.nextInt(transitions.size)]
-        val r = issue(Target.Preset(via), Kind.Interstitial)
-        pendingInterstitial = r
-        pendingDestination = destination
-        return r
-    }
-
-    private fun issueNormal(ref: PresetRef?): PlayRequest =
-        issue(if (ref == null) Target.Idle else Target.Preset(ref), Kind.Normal)
-
-    private fun issue(target: Target, kind: Kind): PlayRequest {
+    /** Issues a request for [ref], or an idle request (with its notice) when there is nothing to play. */
+    private fun issue(ref: PresetRef?): PlayRequest {
+        val target: Target = if (ref == null) Target.Idle else Target.Preset(ref)
         val r = PlayRequest(
             requestId = allocateId(),
             target = target,
-            kind = kind,
             notice = if (target == Target.Idle) EMPTY_SCOPE_NOTICE else null,
         )
         latest = r
         latestHistoryIndex = -1
-        pendingInterstitial = null
-        // A cancelled interstitial's destination was never played: give it back to the cycle (D12).
-        pendingDestination?.let { d ->
-            val playsIt = (target as? Target.Preset)?.ref?.key == d.key
-            if (!playsIt && d.key in candidateKeys && d.key !in remaining) remaining.add(0, d.key)
-        }
-        pendingDestination = null
-        current = (target as? Target.Preset)?.ref
+        current = ref
         return r
     }
 

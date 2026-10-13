@@ -287,6 +287,13 @@ class MenuTest {
         gogglesOff()
     }
 
+    /** The author removed interstitials (2026-10-13): no such row anywhere in the list. */
+    @Test fun menu_hasNoInterstitialRow() {
+        openMenu()
+        val found = runCatching { scrollTo(hasText("Transition interstitials")) }.isSuccess
+        assertFalse("row present: Transition interstitials", found)
+    }
+
     /** Double tap only opens the menu, never closes it, and the scrim passes nothing to the visualization. */
     @Test fun scrimDoubleTap_doesNotClose() {
         openMenu()
@@ -422,7 +429,7 @@ class MenuTest {
         openMenu()
         scrollTo(hasText("Blend", substring = true)) // the label reads "Blend: 3.0 s"
         // The Blend slider, by its range (1..10 s): the section's labels and sliders are flat siblings, so a sibling
-        // match would also catch the Interstitial slider (2..10 s); the Lens spacing slider is -10..10 mm.
+        // match would also catch another slider; the Lens spacing slider is -10..10 mm.
         val blendSlider = SemanticsMatcher("the Blend slider") {
             it.config.getOrNull(SemanticsProperties.ProgressBarRangeInfo)?.range == 1f..10f
         }
