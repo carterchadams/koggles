@@ -82,7 +82,8 @@ class LaunchSplashTest {
         if (AppGraph.audio.snapshot.value.state == AudioState.ShowingExplainer) {
             compose.runOnUiThread { AppGraph.audio.dispatch(AudioEvent.ExplainerAccepted) }
         }
-        compose.mainClock.advanceTimeByFrame()
+        compose.waitUntil(5_000) { AppGraph.audio.snapshot.value.state != AudioState.ShowingExplainer }
+        compose.mainClock.advanceTimeByFrame() // the explainer's touch-blocking box leaves the tree
         compose.mainClock.advanceTimeBy(800)                  // the hold: logo fully visible
         compose.onNodeWithTag("launch-logo").assertExists()
         compose.onNodeWithTag("visualizer-gestures").performTouchInput { doubleClick() }

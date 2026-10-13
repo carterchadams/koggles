@@ -8,6 +8,7 @@
 set -euo pipefail
 : "${ANDROID_SERIAL:?set ANDROID_SERIAL to the emulator or device serial}"
 cd "$(dirname "$0")/../.."
+[ $# -le 1 ] || { echo "instrumented: one argument at most, a comma-separated class list (got $#)" >&2; exit 64; }
 args=(:app:connectedDebugAndroidTest)
 [ $# -eq 0 ] || args+=("-Pandroid.testInstrumentationRunnerArguments.class=$1")
 case "$ANDROID_SERIAL" in emulator-*) ;; *) args+=(-PkogglesAppIdSuffix=.brand);; esac

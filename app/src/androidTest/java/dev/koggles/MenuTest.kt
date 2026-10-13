@@ -4,7 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Color as AColor
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.isOff
 import androidx.compose.ui.test.isOn
@@ -294,7 +295,8 @@ class MenuTest {
     @Test fun menu_panelIsBlack() {
         openMenu()
         val bmp = compose.onNodeWithTag("menu-list").captureToImage().asAndroidBitmap()
-        assertEquals("panel background", 0xFF000000.toInt(), bmp.getPixel(4, 4)) // inside the 16 dp content padding
+        val inset = (12 * compose.density.density).toInt() // past the panel's antialiased 1 dp border at any density
+        assertEquals("panel background", 0xFF000000.toInt(), bmp.getPixel(inset, inset)) // inside the 16 dp content padding
     }
 
     /** A checked switch's track is the branding cyan, i.e. Material widgets took the theme. */
@@ -317,7 +319,12 @@ class MenuTest {
     @Test fun menu_sliderTracksAreNeon() {
         openMenu()
         scrollTo(hasText("Blend", substring = true)) // the label reads "Blend: 3.0 s"
-        val bmp = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).onFirst().captureToImage().asAndroidBitmap()
+        // The Blend slider, by its range (1..10 s): the section's labels and sliders are flat siblings, so a sibling
+        // match would also catch the Interstitial slider (2..10 s); the Lens spacing slider is -10..10 mm.
+        val blendSlider = SemanticsMatcher("the Blend slider") {
+            it.config.getOrNull(SemanticsProperties.ProgressBarRangeInfo)?.range == 1f..10f
+        }
+        val bmp = compose.onNode(blendSlider).captureToImage().asAndroidBitmap()
         assertTrue("no cyan active track", near(bmp, 0xFF00E5FF.toInt()) > 20)
         assertTrue("no deep-magenta inactive track", near(bmp, 0xFF3A0A33.toInt()) > 20)
     }
