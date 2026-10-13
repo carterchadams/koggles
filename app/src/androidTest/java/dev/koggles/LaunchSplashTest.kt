@@ -13,7 +13,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.koggles.audio.AudioEvent
 import dev.koggles.audio.AudioState
 import dev.koggles.ui.SPLASH_MS
+import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.BeforeClass
@@ -42,6 +44,8 @@ class LaunchSplashTest {
     }
 
     @Before fun launchFrozen() {
+        // The one-time "Choose folder" prompt would open the menu by itself on a fresh install (W1): off.
+        runBlocking { AppGraph.settings.update { it.copy(folderPrompted = true) } }
         compose.mainClock.autoAdvance = false
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.mainClock.advanceTimeByFrame() // the first frame: the overlay composes and its animation starts
@@ -86,8 +90,22 @@ class LaunchSplashTest {
         compose.mainClock.advanceTimeByFrame() // the explainer's touch-blocking box leaves the tree
         compose.mainClock.advanceTimeBy(800)                  // the hold: logo fully visible
         compose.onNodeWithTag("launch-logo").assertExists()
+        // Precondition (W1): the menu is closed, so only the double tap below can open it.
+        compose.runOnUiThread { AppGraph.menu.close() }
+        compose.mainClock.advanceTimeByFrame()
+        assertFalse("menu open before the double tap", AppGraph.menu.open.value)
+        compose.onNodeWithTag("menu").assertDoesNotExist()
         compose.onNodeWithTag("visualizer-gestures").performTouchInput { doubleClick() }
         compose.waitUntil(3_000) { AppGraph.menu.open.value }
         compose.onNodeWithTag("launch-logo").assertExists() // still mid-fade when the menu opened
+    }
+
+    /** Recreation during the fade (a uiMode or locale change recreates the activity) does not replay it (W2). */
+    @Test fun recreationDuringFade_doesNotReplay() {
+        compose.onNodeWithTag("launch-logo").assertExists()
+        compose.mainClock.advanceTimeBy(800)
+        scenario.recreate()
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag("launch-logo").assertDoesNotExist()
     }
 }

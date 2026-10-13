@@ -33,7 +33,8 @@ const val SPLASH_MS = 1600
  * captured pixel of the logo is alpha × logo and the ramps can be asserted. One frame-clock animation,
  * no `delay()`: under the test clock it costs nothing. Never consumes touches: no pointer input here, so
  * a tap or double tap during the fade reaches the gesture layer below. `rememberSaveable` keeps it from
- * replaying when the activity is restored from saved state; a fresh launch shows it again.
+ * replaying when the activity is restored from saved state, during the fade or after it; a fresh launch shows
+ * it again.
  *
  * The bitmap: `magick images/KogglesText.png -fuzz 8% -trim +repage -bordercolor black -border 24
  * -resize 800x -strip app/src/main/res/drawable-nodpi/koggles_logo.png` (brand-images phase).
@@ -41,9 +42,14 @@ const val SPLASH_MS = 1600
 @Composable
 fun LaunchSplash() {
     var done by rememberSaveable { mutableStateOf(false) }
-    if (done) return
+    var started by rememberSaveable { mutableStateOf(false) }
+    // Restored mid-fade (a uiMode or locale change recreates the activity before 1600 ms): the fade had
+    // started in the previous activity, so it is over, not replayed from zero.
+    val restoredMidFade = remember { started && !done }
+    if (done || restoredMidFade) return
     val alpha = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
+        started = true
         alpha.animateTo(
             0f,
             keyframes {
