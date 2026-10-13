@@ -46,6 +46,9 @@ jobs:
       - name: Lint workflows
         run: tools/ci/actionlint.sh
 
+      - name: ImageMagick (tools/ci/test-launcher-icon.sh reads the WebP launcher rasters)
+        run: sudo apt-get update -q && sudo apt-get install -y -q imagemagick
+
       - name: Release-script tests (static)
         run: |
           tools/ci/test-version-from-tag.sh
