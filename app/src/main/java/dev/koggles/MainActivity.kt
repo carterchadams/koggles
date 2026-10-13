@@ -47,6 +47,7 @@ import dev.koggles.ui.menu.MenuActions
 import dev.koggles.ui.visualizerGestures
 import kotlinx.coroutines.flow.first
 import dev.koggles.ui.Explainer
+import dev.koggles.ui.LaunchSplash
 import dev.koggles.ui.UnsupportedScreen
 import dev.koggles.ui.isGles3Supported
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -128,6 +129,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                LaunchSplash() // the logo fade, over everything, once per launch
             }
         }
         lifecycleScope.launch { promptForFolderOnce() }
