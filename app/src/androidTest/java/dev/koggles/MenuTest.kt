@@ -4,13 +4,13 @@ import android.graphics.Bitmap
 import android.graphics.Color as AColor
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.hasSetProgressAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.isOff
 import androidx.compose.ui.test.isOn
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.isToggleable
-import androidx.compose.ui.test.onAllNodes
 import kotlin.math.abs
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -317,7 +317,7 @@ class MenuTest {
     @Test fun menu_sliderTracksAreNeon() {
         openMenu()
         scrollTo(hasText("Blend"))
-        val bmp = compose.onAllNodes(hasSetProgressAction()).onFirst().captureToImage().asAndroidBitmap()
+        val bmp = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).onFirst().captureToImage().asAndroidBitmap()
         assertTrue("no cyan active track", near(bmp, 0xFF00E5FF.toInt()) > 20)
         assertTrue("no deep-magenta inactive track", near(bmp, 0xFF3A0A33.toInt()) > 20)
     }
