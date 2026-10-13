@@ -316,7 +316,7 @@ class MenuTest {
     /** A slider's inactive track is secondaryContainer and its active track is primary (cyan). */
     @Test fun menu_sliderTracksAreNeon() {
         openMenu()
-        scrollTo(hasText("Blend"))
+        scrollTo(hasText("Blend", substring = true)) // the label reads "Blend: 3.0 s"
         val bmp = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).onFirst().captureToImage().asAndroidBitmap()
         assertTrue("no cyan active track", near(bmp, 0xFF00E5FF.toInt()) > 20)
         assertTrue("no deep-magenta inactive track", near(bmp, 0xFF3A0A33.toInt()) > 20)
