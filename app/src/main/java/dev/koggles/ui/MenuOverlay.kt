@@ -36,6 +36,7 @@ import dev.koggles.ui.menu.TreeExpansion
 import dev.koggles.ui.menu.audioSection
 import dev.koggles.ui.menu.displaySection
 import dev.koggles.ui.menu.librarySection
+import dev.koggles.ui.menu.licensesItem
 import dev.koggles.ui.menu.nowPlayingSection
 import dev.koggles.ui.menu.packsSection
 import dev.koggles.ui.menu.playbackSection
@@ -98,8 +99,10 @@ private fun MenuList(
         modifier = modifier.fillMaxWidth().testTag("menu-list"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        // First run: the Library section leads, so "Choose folder" is the first thing seen.
-        if (highlightChooseFolder) librarySection(model.library, true, onOpenLicenses, actions)
+        // Order fixed by the author (2026-10-13): Goggles mode is the top-most option on every run, the
+        // first run included (its highlighted "Choose folder" stays inside Library), and "About &
+        // licenses" is the very last item, below Audio.
+        displaySection(model.settings, actions)
         nowPlayingSection(
             model.now,
             current?.let { model.library.catalog.pack(it.packId)?.name },
@@ -112,8 +115,8 @@ private fun MenuList(
             model.library.catalog, model.disabled, model.favorites, model.skipped, current?.key,
             expanded, actions,
         )
-        displaySection(model.settings, actions)
-        if (!highlightChooseFolder) librarySection(model.library, false, onOpenLicenses, actions)
+        librarySection(model.library, highlightChooseFolder, actions)
         audioSection(model.audio, model.silence, actions)
+        licensesItem(onOpenLicenses)
     }
 }

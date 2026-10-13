@@ -15,12 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.koggles.presets.LibraryState
 
-internal fun LazyListScope.librarySection(
-    s: LibraryState,
-    highlightChooseFolder: Boolean,
-    onOpenLicenses: () -> Unit,
-    actions: MenuActions,
-) {
+internal fun LazyListScope.librarySection(s: LibraryState, highlightChooseFolder: Boolean, actions: MenuActions) {
     item(key = "library-header") { SectionHeader("Library") }
     item(key = "library-body") {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -44,8 +39,12 @@ internal fun LazyListScope.librarySection(
         }
         for (e in s.errors.take(MAX_ERRORS)) Text(e, style = MaterialTheme.typography.bodySmall)
         if (s.errors.size > MAX_ERRORS) Text("…and ${s.errors.size - MAX_ERRORS} more", style = MaterialTheme.typography.bodySmall)
-        TextButton(onClick = onOpenLicenses) { Text("About & licenses") }
     }
+}
+
+/** The last item of the menu: the author wants licences at the very bottom, below every section. */
+internal fun LazyListScope.licensesItem(onOpenLicenses: () -> Unit) {
+    item(key = "licenses") { TextButton(onClick = onOpenLicenses) { Text("About & licenses") } }
 }
 
 private const val MAX_ERRORS = 20

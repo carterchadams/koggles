@@ -19,7 +19,10 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -152,6 +155,16 @@ class MenuTest {
             compose.activity.requestedOrientation ==
                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+    }
+
+    /** The author (2026-10-13): Goggles mode is the top-most option; licences sit at the very bottom, below Audio. */
+    @Test fun menuOrder_gogglesModeFirst_licensesLast() {
+        openMenu()
+        val list = compose.onNodeWithTag("menu-list")
+        list.onChildren().onFirst().assert(hasText("Display")) { "first section expected Display" }
+        list.onChildren()[1].assert(hasText("Goggles mode")) { "first option expected Goggles mode" }
+        scrollTo(hasText("About & licenses"))
+        list.onChildren().onLast().assert(hasText("About & licenses")) { "last item expected About & licenses" }
     }
 
     @Test fun closeButton_closesMenu() {
