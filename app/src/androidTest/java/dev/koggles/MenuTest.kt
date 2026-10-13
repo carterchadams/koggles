@@ -1,5 +1,17 @@
 package dev.koggles
 
+import android.graphics.Bitmap
+import android.graphics.Color as AColor
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasSetProgressAction
+import androidx.compose.ui.test.isOff
+import androidx.compose.ui.test.isOn
+import androidx.compose.ui.test.isSelectable
+import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.onAllNodes
+import kotlin.math.abs
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
@@ -271,5 +283,49 @@ class MenuTest {
         @AfterClass @JvmStatic fun tearDownClass() {
             AppGraph.overrideForTest(playback = null)
         }
+    }
+
+    /** Counts pixels within ±12 per channel of [argb] in [bmp]. */
+    private fun near(bmp: Bitmap, argb: Int) = (0 until bmp.width).sumOf { x -> (0 until bmp.height).count { y ->
+        val p = bmp.getPixel(x, y)
+        abs(AColor.red(p) - AColor.red(argb)) <= 12 && abs(AColor.green(p) - AColor.green(argb)) <= 12 && abs(AColor.blue(p) - AColor.blue(argb)) <= 12 } }
+
+    /** Brand-images M6: the panel is black whatever the system theme. */
+    @Test fun menu_panelIsBlack() {
+        openMenu()
+        val bmp = compose.onNodeWithTag("menu-list").captureToImage().asAndroidBitmap()
+        assertEquals("panel background", 0xFF000000.toInt(), bmp.getPixel(4, 4)) // inside the 16 dp content padding
+    }
+
+    /** A checked switch's track is the branding cyan, i.e. Material widgets took the theme. */
+    @Test fun menu_widgetsAreNeon() {
+        openMenu()
+        val bmp = compose.onAllNodes(isToggleable() and isOn()).onFirst().captureToImage().asAndroidBitmap()
+        val cyan = (0 until bmp.width).any { x -> (0 until bmp.height).any { y ->
+            val p = bmp.getPixel(x, y); AColor.red(p) < 80 && AColor.green(p) > 200 && AColor.blue(p) > 200 } }
+        assertTrue("no cyan pixel in a checked switch", cyan)
+    }
+
+    /** A selected FilterChip is painted secondaryContainer (deep magenta), not Material's default. */
+    @Test fun menu_selectedChipIsDeepMagenta() {
+        openMenu()
+        val bmp = compose.onAllNodes(isSelectable() and isSelected()).onFirst().captureToImage().asAndroidBitmap()
+        assertTrue("no secondaryContainer pixels in a selected chip", near(bmp, 0xFF3A0A33.toInt()) > 50)
+    }
+
+    /** A slider's inactive track is secondaryContainer and its active track is primary (cyan). */
+    @Test fun menu_sliderTracksAreNeon() {
+        openMenu()
+        scrollTo(hasText("Blend"))
+        val bmp = compose.onAllNodes(hasSetProgressAction()).onFirst().captureToImage().asAndroidBitmap()
+        assertTrue("no cyan active track", near(bmp, 0xFF00E5FF.toInt()) > 20)
+        assertTrue("no deep-magenta inactive track", near(bmp, 0xFF3A0A33.toInt()) > 20)
+    }
+
+    /** An unchecked switch's track is surfaceContainerHighest (near black), not Material's grey. */
+    @Test fun menu_uncheckedSwitchTrackIsDark() {
+        openMenu()
+        val bmp = compose.onAllNodes(isToggleable() and isOff()).onFirst().captureToImage().asAndroidBitmap()
+        assertTrue("no surfaceContainerHighest pixels in an unchecked switch", near(bmp, 0xFF1A1A24.toInt()) > 50)
     }
 }
