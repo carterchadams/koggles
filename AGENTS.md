@@ -49,3 +49,9 @@ stop to ask "should I continue?".
 - When a test fails or flakes, first ask what real problem it could indicate. Several real bugs in
   this project surfaced as "flaky" tests.
 - Report outcomes faithfully: say what ran, what passed, what is pending, and what you did not do.
+
+## Reviewer pin
+
+The adversarial reviewer is the OpenAI Codex companion, pinned per phase in its ledger. Model pin:
+
+ttp-codex-model: gpt-6.1-sol
