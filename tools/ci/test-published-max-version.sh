@@ -16,6 +16,8 @@ if [ "\$1 \$2" = "release list" ]; then
   [ "\$mode" = bad-tag ] && { printf 'v0.1.0\nnightly\n'; exit 0; }
   [ "\$mode" = tags-retained ] && { printf 'v0.1.0\n'; exit 0; }
   [ "\$mode" = candidate-pushed ] && { printf 'v0.1.0\nv0.2.0\n'; exit 0; }
+  # The rolling release 'current' (the README's fixed download link) is not a version.
+  [ "\$mode" = rolling ] && { printf 'v0.1.0\nv0.2.0\ncurrent\n'; exit 0; }
   printf 'v0.1.0\nv0.2.0\nv0.10.0\n'
   # Drafts (never shipped) are listed only when --exclude-drafts is missing.
   case " \$* " in *" --exclude-drafts "*) ;; *) printf 'v1.0.0\ndraft-junk\n' ;; esac
@@ -28,6 +30,7 @@ if [ "\$1 \$2" = "api" ] || [ "\$1" = "api" ]; then
   # The candidate's own tag is already pushed when the workflow runs.
   [ "\$mode" = candidate-pushed ] && { printf 'v0.1.0\nv0.2.0\nv0.3.0\n'; exit 0; }
   [ "\$mode" = none ] && exit 0
+  [ "\$mode" = rolling ] && { printf 'v0.1.0\nv0.2.0\ncurrent\n'; exit 0; }
   printf 'v0.1.0\nv0.2.0\nv0.10.0\n'; exit 0
 fi
 if [ "\$1 \$2" = "release view" ]; then
@@ -51,6 +54,7 @@ check max-of-three ok 1000
 check no-releases none 0
 check list-fails list-fails fail
 check non-version-tag bad-tag fail
+check rolling-release-ignored rolling 200
 check withdrawn-release-tag-kept tags-retained 200
 check tags-query-fails api-fails fail
 # The candidate tag must not reserve itself (else every release fails its own guard).

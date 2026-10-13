@@ -72,14 +72,20 @@ on GitHub.
 
 ## Downloads
 
-Once tagged, signed APKs are published on the repository's
+Latest release, for a direct download:
+<https://github.com/carterchadams/koggles/releases/download/current/koggles-current.apk>
+(and its `koggles-current.apk.sha256`). That link always serves the newest release's APK under a
+fixed name; the `current` release is refreshed by every release.
+
+Signed APKs are published on the repository's
 [Releases](https://github.com/carterchadams/koggles/releases) page for each `vX.Y.Z` tag. Each
-release has four files:
+release has six files:
 
 - `koggles-vX.Y.Z.apk`
 - `koggles-vX.Y.Z.apk.sha256`
 - `koggles-vX.Y.Z-mapping.txt`, the R8 mapping for crash reports
 - `koggles-vX.Y.Z-source.tar.gz`, the complete corresponding source, submodules included
+- `koggles-current.apk` and `koggles-current.apk.sha256`, the same APK under the fixed name above
 
 To verify a download before installing:
 

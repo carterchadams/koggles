@@ -202,13 +202,10 @@ jobs:
       - name: Assemble release files
         run: |
           set -euo pipefail
-          mkdir -p dist
-          base="koggles-$TAG"
-          cp "$(find signed -name app-release.apk)" "dist/$base.apk"
-          cp "$(find signed -name mapping.txt)" "dist/$base-mapping.txt"
-          ref="$GITHUB_SHA"
-          tools/ci/source-archive.sh "$ref" "dist/$base-source.tar.gz"
-          (cd dist && sha256sum "$base.apk" > "$base.apk.sha256")
+          tools/ci/source-archive.sh "$GITHUB_SHA" source.tar.gz
+          # Six files: the four versioned ones plus koggles-current.apk and its checksum, the fixed-name
+          # copy the README links to (tools/ci/assemble-release-files.sh, tested by its test-*.sh).
+          tools/ci/assemble-release-files.sh "$(find signed -name app-release.apk)" "$(find signed -name mapping.txt)" source.tar.gz "$TAG" dist
 
       - name: Upload release files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -280,3 +277,19 @@ jobs:
           pre=()
           [ "${VERSION_NAME%%.*}" = 0 ] && pre=(--prerelease)
           gh release create "$TAG" dist/* --verify-tag --title "Koggles $TAG" --notes-file notes.md "${pre[@]}"
+          # The rolling release "current": GitHub's releases/latest skips pre-releases (every 0.x is one), so
+          # the README's fixed link is releases/download/current/koggles-current.apk, refreshed on every
+          # release. Its tag moves to this release's commit; published-max-version.sh ignores the name.
+          sha="$(git rev-parse "refs/tags/$TAG^{commit}")"   # the checkout keeps no credentials: move the tag via the API
+          if gh api "repos/$GH_REPO/git/refs/tags/current" > /dev/null 2>&1; then
+            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/current" -f sha="$sha" -F force=true > /dev/null
+          else
+            gh api "repos/$GH_REPO/git/refs" -f ref=refs/tags/current -f sha="$sha" > /dev/null
+          fi
+          notes="Fixed-name copy of the newest release, $TAG, for the README's direct download link. See the $TAG release for the versioned files and notes."
+          if gh release view current > /dev/null 2>&1; then
+            gh release upload current dist/koggles-current.apk dist/koggles-current.apk.sha256 --clobber
+            gh release edit current --title "Koggles current ($TAG)" --notes "$notes" --latest=false
+          else
+            gh release create current dist/koggles-current.apk dist/koggles-current.apk.sha256 --title "Koggles current ($TAG)" --notes "$notes" --latest=false
+          fi

@@ -57,6 +57,7 @@ jobs:
           tools/ci/test-published-max-version.sh
           tools/ci/test-readme-images.sh
           tools/ci/test-launcher-icon.sh
+          tools/ci/test-assemble-release-files.sh
 
       - name: Unit tests and debug build
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
