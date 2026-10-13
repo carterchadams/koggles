@@ -19,10 +19,8 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onChildren
-import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -157,14 +155,21 @@ class MenuTest {
         }
     }
 
+    /** The texts of the list's composed children, top to bottom by layout position (a lazy list's child order is composition order). */
+    private fun listTextsByPosition(): List<String> =
+        compose.onNodeWithTag("menu-list").onChildren().fetchSemanticsNodes()
+            .sortedBy { it.boundsInRoot.top }
+            .map { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text } ?: "" }
+
     /** The author (2026-10-13): Goggles mode is the top-most option; licences sit at the very bottom, below Audio. */
     @Test fun menuOrder_gogglesModeFirst_licensesLast() {
         openMenu()
-        val list = compose.onNodeWithTag("menu-list")
-        list.onChildren().onFirst().assert(hasText("Display")) { "first section expected Display" }
-        list.onChildren()[1].assert(hasText("Goggles mode")) { "first option expected Goggles mode" }
+        val top = listTextsByPosition()
+        assertEquals("first section expected Display", "Display", top.getOrNull(0))
+        assertEquals("first option expected Goggles mode", "Goggles mode", top.getOrNull(1))
         scrollTo(hasText("About & licenses"))
-        list.onChildren().onLast().assert(hasText("About & licenses")) { "last item expected About & licenses" }
+        val bottom = listTextsByPosition()
+        assertEquals("last item expected About & licenses: $bottom", "About & licenses", bottom.lastOrNull())
     }
 
     @Test fun closeButton_closesMenu() {
