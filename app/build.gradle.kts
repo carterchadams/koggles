@@ -101,10 +101,6 @@ abstract class StageStarterPack : DefaultTask() {
     @get:InputFile abstract val allowlist: RegularFileProperty
     @get:InputDirectory abstract val repoDir: DirectoryProperty
 
-    /** Transition presets (DP5): staged under `! Transition/`, which the indexer treats as transitions. */
-    @get:InputFile abstract val transitionsAllowlist: RegularFileProperty
-    @get:InputDirectory abstract val transitionsRepoDir: DirectoryProperty
-
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
     @TaskAction
@@ -112,9 +108,8 @@ abstract class StageStarterPack : DefaultTask() {
         val out = outputDir.get().asFile
         out.deleteRecursively()
         out.mkdirs()
-        val problems = stage(allowlist.get().asFile, repoDir.get().asFile, out) +
-            stage(transitionsAllowlist.get().asFile, transitionsRepoDir.get().asFile, out.resolve("! Transition"))
-        if (problems.isNotEmpty()) throw GradleException("Koggles Starter Pack allowlists:\n" + problems.joinToString("\n"))
+        val problems = stage(allowlist.get().asFile, repoDir.get().asFile, out)
+        if (problems.isNotEmpty()) throw GradleException("Koggles Starter Pack allowlist:\n" + problems.joinToString("\n"))
     }
 
     /** Copies every allowlisted file from [repo] into [dest], flattened; returns the problems found. */
@@ -147,11 +142,8 @@ val bundledAssetsDir = layout.buildDirectory.dir("generated/bundled")
 val fetchBundledContent by tasks.registering(FetchBundledContent::class) {
     description = "Clones the pinned bundled preset and texture repos into build/content/."
     urls.put("presets-projectm-classic", "https://github.com/projectM-visualizer/presets-projectm-classic")
-    urls.put("presets-cream-of-the-crop", "https://github.com/projectM-visualizer/presets-cream-of-the-crop")
     urls.put("presets-milkdrop-texture-pack", "https://github.com/projectM-visualizer/presets-milkdrop-texture-pack")
     shas.put("presets-projectm-classic", libs.versions.classicSha.get())
-    shas.put("presets-cream-of-the-crop", libs.versions.cotcSha.get())
-    sparse.put("presets-cream-of-the-crop", listOf("/! Transition/", "/LICENSE.md")) // DP5: transitions only
     shas.put("presets-milkdrop-texture-pack", libs.versions.texturePackSha.get())
     outputDir.set(bundledContentDir)
 }
@@ -161,9 +153,6 @@ val stageStarterPack by tasks.registering(StageStarterPack::class) {
     allowlist.set(providers.gradleProperty("kogglesPresetAllowlist").map { layout.projectDirectory.file(it) }
         .orElse(layout.projectDirectory.file("bundled-presets.txt")))
     repoDir.set(fetchBundledContent.flatMap { it.outputDir.dir("presets-projectm-classic") })
-    transitionsAllowlist.set(providers.gradleProperty("kogglesTransitionAllowlist").map { layout.projectDirectory.file(it) }
-        .orElse(layout.projectDirectory.file("bundled-transitions.txt")))
-    transitionsRepoDir.set(fetchBundledContent.flatMap { it.outputDir.dir("presets-cream-of-the-crop") })
     outputDir.set(layout.buildDirectory.dir("generated/starter-pack"))
 }
 
@@ -180,11 +169,6 @@ val syncBundledContent by tasks.registering(Sync::class) {
     from(classic) {
         include("LICENSE.md", "README.md")
         rename { "projectm-classic-presets-$it" }
-        into("licenses")
-    }
-    from(fetchBundledContent.flatMap { it.outputDir.dir("presets-cream-of-the-crop") }) {
-        include("LICENSE.md") // the projectM team's statement on MilkDrop presets (DP5)
-        rename { "cream-of-the-crop-$it" }
         into("licenses")
     }
     from(pack) {
@@ -204,8 +188,6 @@ tasks.named("preBuild") { dependsOn(syncBundledContent) }
 val androidTestAllowlist by tasks.registering(Sync::class) {
     from(providers.gradleProperty("kogglesTestAllowlist").map { layout.projectDirectory.file(it) }
         .orElse(layout.projectDirectory.file("bundled-presets.txt"))) { rename { "bundled-presets.txt" } }
-    from(providers.gradleProperty("kogglesTestTransitionAllowlist").map { layout.projectDirectory.file(it) }
-        .orElse(layout.projectDirectory.file("bundled-transitions.txt"))) { rename { "bundled-transitions.txt" } }
     into(layout.buildDirectory.dir("generated/androidTestAllowlist"))
 }
 tasks.named("preBuild") { dependsOn(androidTestAllowlist) }

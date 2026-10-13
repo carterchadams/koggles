@@ -8,8 +8,7 @@ and runs full screen, or in **goggles mode**: side-by-side with lens correction,
 such as Google Cardboard and its many look-alikes.
 
 - **Bundled presets:** the Koggles Starter Pack, a selection of 299 presets from projectM's
-  [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), four
-  transition presets, and the MilkDrop texture pack.
+  [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), and the MilkDrop texture pack.
 - **Your own packs:** choose a folder once (for example `Documents/Koggles/<pack>/…`) and its
   presets join the rotation.
 - **Gestures:** tap for the next preset; double-tap for the menu (playback, packs and browser,
@@ -167,10 +166,9 @@ Android requires every APK to be signed, so a rebuilt APK carries your key, not 
 - **Google Cardboard SDK:** Apache-2.0.
 - **Koggles Starter Pack presets:** a selection from projectM's
   [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), whose
-  repository states no license, plus four transition presets from Cream of the Crop. They are
-  distributed under the projectM team's statement that MilkDrop presets are safe to treat as
-  public domain, and that it removes presets on request (`LICENSE.md` in its
-  `presets-cream-of-the-crop` repository). The app quotes it verbatim in
+  repository states no license. They are distributed under the projectM team's statement that
+  MilkDrop presets are safe to treat as public domain, and that it removes presets on request
+  (`LICENSE.md` in its `presets-cream-of-the-crop` repository). The app quotes it verbatim in
   `assets/licenses/koggles-starter-pack-presets.md`.
 - **MilkDrop texture pack:** the textures shipped with MilkDrop plus others used by presets; the
   pack states no license.

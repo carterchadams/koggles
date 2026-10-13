@@ -75,7 +75,15 @@ if [ "${1:-}" != "--fixtures" ]; then
   resign "$tmp/m-changed.apk" "$tmp/m-changed.s.apk"; only5 content-changed "$tmp/m-changed.s.apk"
   mkdir -p "$tmp/n/$pk/Other"; printf 'MILKDROP_PRESET_VERSION=201\n' > "$tmp/n/$pk/Other/Koggles - Nested.milk"
   cp "$apk" "$tmp/m-nested.apk"; (cd "$tmp/n" && zip -q "$tmp/m-nested.apk" "$pk/Other/Koggles - Nested.milk")
-  resign "$tmp/m-nested.apk" "$tmp/m-nested.s.apk"; only5 content-nested-outside-transitions "$tmp/m-nested.s.apk"
+  resign "$tmp/m-nested.apk" "$tmp/m-nested.s.apk"; only5 content-nested "$tmp/m-nested.s.apk"
+  # No subfolder at all (the former "! Transition/" exception is gone): an allowlisted preset's bytes under it must be
+  # reported as outside the pack, not merely as an extra file (that is what the old placement exception would say).
+  mkdir -p "$tmp/t/$pk/! Transition"; (cd "$tmp/t" && unzip -q "$apk" "$victim" && mv "$victim" "$pk/! Transition/")
+  cp "$apk" "$tmp/m-nestedt.apk"; (cd "$tmp/t" && zip -q "$tmp/m-nestedt.apk" "$pk/! Transition/$(basename "$victim")")
+  resign "$tmp/m-nestedt.apk" "$tmp/m-nestedt.s.apk"; only5 content-nested-transition "$tmp/m-nestedt.s.apk"
+  out_t="$("$v" "$tmp/m-nestedt.s.apk" "$map" "$name" "$code" "$rs_cert" 2>&1)"
+  if grep -qF "outside-pack=['assets/presets/Koggles Starter Pack/! Transition/" <<<"$out_t"; then pass=$((pass+1))
+  else fail=$((fail+1)); echo "FAIL content-nested-transition-outside-pack: check 5 must name the nested file as outside the pack:"; echo "$out_t" | sed 's/^/    /'; fi
   # H7: the presets ship with the projectM team's public-domain statement.
   cp "$apk" "$tmp/m-nostatement.apk"; zip -qd "$tmp/m-nostatement.apk" 'assets/licenses/koggles-starter-pack-presets.md'
   resign "$tmp/m-nostatement.apk" "$tmp/m-nostatement.s.apk"; only5 no-public-domain-statement "$tmp/m-nostatement.s.apk"

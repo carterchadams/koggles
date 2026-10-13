@@ -9,19 +9,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Preset plan M1: the APK bundles exactly the hash-pinned allowlists (app/bundled-presets.txt flat, and
- * app/bundled-transitions.txt under `! Transition/`, both packaged into this test APK): the same paths,
- * the same bytes, no other subfolder, and nothing else under presets/.
+ * Preset plan M1: the APK bundles exactly the hash-pinned allowlist (app/bundled-presets.txt, packaged into
+ * this test APK), flat: the same names, the same bytes, no subfolder at all (the `! Transition/` folder went
+ * with the interstitial feature, 2026-10-13), and nothing else under presets/.
  */
 @RunWith(AndroidJUnit4::class)
 class BundledPackTest {
     private val appAssets = InstrumentationRegistry.getInstrumentation().targetContext.assets
     private val testAssets = InstrumentationRegistry.getInstrumentation().context.assets
 
-    /** Pack-relative path -> SHA-256: classic presets flat, transitions under `! Transition/`. */
+    /** Pack-relative path -> SHA-256: the classic presets, flat. */
     private fun allowlist(): Map<String, String> =
-        entries("bundled-presets.txt").associate { (hash, path) -> path.substringAfterLast('/') to hash } +
-            entries("bundled-transitions.txt").associate { (hash, path) -> "$TRANSITIONS/${path.substringAfterLast('/')}" to hash }
+        entries("bundled-presets.txt").associate { (hash, path) -> path.substringAfterLast('/') to hash }
 
     private fun entries(asset: String): List<Pair<String, String>> =
         testAssets.open(asset).bufferedReader().readLines()
@@ -52,11 +51,10 @@ class BundledPackTest {
         val extra = (have - want.keys).sorted()
         val changed = (want.keys intersect have).filter { sha256("presets/$PACK/$it") != want.getValue(it) }.sorted()
         assertTrue("missing=$missing extra=$extra changed=$changed", missing.isEmpty() && extra.isEmpty() && changed.isEmpty())
-        assertEquals("only '$TRANSITIONS' may be nested", setOf(TRANSITIONS), dirs)
+        assertEquals("no subfolder may be nested", emptySet<String>(), dirs)
     }
 
     companion object {
         const val PACK = "Koggles Starter Pack"
-        const val TRANSITIONS = "! Transition"
     }
 }

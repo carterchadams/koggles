@@ -43,7 +43,7 @@ class BundledPresetsCompileTest {
         FakeAudio.uninstall()
     }
 
-    /** Every .milk asset under [dir], recursively (the pack is flat plus `! Transition/`). */
+    /** Every .milk asset under [dir], recursively (the pack is flat; a nested file would still be loaded). */
     private fun presetsUnder(assets: android.content.res.AssetManager, dir: String): List<String> =
         assets.list(dir)!!.sorted().flatMap { name ->
             val path = "$dir/$name"
