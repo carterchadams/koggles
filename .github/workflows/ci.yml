@@ -52,6 +52,8 @@ jobs:
           tools/ci/test-verify-release-apk.sh --fixtures
           tools/ci/test-smoke-verdict.sh
           tools/ci/test-published-max-version.sh
+          tools/ci/test-readme-images.sh
+          tools/ci/test-launcher-icon.sh
 
       - name: Unit tests and debug build
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug

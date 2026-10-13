@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests tools/ci/verify-release-apk.sh: the signed release passes 8/8, and each check fails on a
+# Tests tools/ci/verify-release-apk.sh: the signed release passes 9/9, and each check fails on a
 # real input built to break exactly it, so a check can't pass by accident.
 #   test-verify-release-apk.sh <signed-release.apk> <mapping.txt> <versionName> <versionCode> <cert> <debug.apk> <no-keep-rules.apk>
 # Static-only mode (CI without device artifacts): test-verify-release-apk.sh --fixtures
@@ -24,8 +24,9 @@ expect no-bypass      "FAIL 1 signature" env SIGNER_OUTPUT_FILE="$fx/apksigner-3
 if [ "${1:-}" != "--fixtures" ]; then
   apk="$1"; map="$2"; name="$3"; code="$4"; cert="$5"; debug="$6"; norules="$7"
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+  bt="${BUILD_TOOLS:-${ANDROID_HOME:-/missing-android-home}/build-tools/36.0.0}"
   out="$("$v" "$apk" "$map" "$name" "$code" "$cert")"; rc=$?
-  if [ "$rc" -eq 0 ] && [ "$(grep -c '^PASS' <<<"$out")" -eq 8 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL positive (rc=$rc):"; echo "$out"; fi
+  if [ "$rc" -eq 0 ] && [ "$(grep -c '^PASS' <<<"$out")" -eq 9 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL positive (rc=$rc):"; echo "$out"; fi
   expect wrong-cert    "FAIL 2 cert-pin"     "$v" "$apk" "$map" "$name" "$code" deadbeef
   # Fail closed: a missing or broken signer parser must fail the gate, not skip checks 1-2.
   mkdir -p "$tmp/noparser"; cp "$v" "$tmp/noparser/"
@@ -41,10 +42,13 @@ if [ "${1:-}" != "--fixtures" ]; then
   expect no-keep-rules "FAIL 6 jni-upcalls"  "$v" "$norules" "$map" "$name" "$code" "$cert"
   expect debuggable    "FAIL 7 not-debuggable" "$v" "$debug" "$map" "$name" "$code" "$cert"
   expect too-big       "FAIL 8 size"         env MAX_APK_MB=1 "$v" "$apk" "$map" "$name" "$code" "$cert"
+  # 9: the entry the manifest's icon points at is deleted (badging still names it: it reads the resource table).
+  icon_path="$("$bt/aapt2" dump badging "$apk" 2>/dev/null | sed -nE "s/^application: .*icon='([^']*)'.*/\1/p" | head -1)"
+  cp "$apk" "$tmp/noicon.apk"; zip -qd "$tmp/noicon.apk" "$icon_path"
+  expect no-icon       "FAIL 9 icon"         "$v" "$tmp/noicon.apk" "$map" "$name" "$code" "$cert"
   # Content is exactly the hash-pinned allowlist: one preset missing, one extra and one with changed
   # bytes must each fail on the content check alone. Each mutation is
   # re-signed with a throwaway key whose cert is passed in, so only check 5 can fail.
-  bt="${BUILD_TOOLS:-${ANDROID_HOME:-/missing-android-home}/build-tools/36.0.0}"
   rs_pw='koggles-verifier-test'
   keytool -genkeypair -keystore "$tmp/rs.jks" -storetype PKCS12 -alias rs -keyalg RSA -keysize 2048 -validity 2 \
     -storepass "$rs_pw" -keypass "$rs_pw" -dname "CN=Koggles verifier test (throwaway)" > /dev/null 2>&1
@@ -60,7 +64,7 @@ if [ "${1:-}" != "--fixtures" ]; then
   victim="$(unzip -Z1 "$apk" | grep -m1 -E "^$pk/[A-Za-z0-9 ._-]+\.milk$")"  # no zip wildcard characters
   resign "$apk" "$tmp/rs-base.apk"
   out_rs="$("$v" "$tmp/rs-base.apk" "$map" "$name" "$code" "$rs_cert" 2>&1)"
-  if [ "$(grep -c '^PASS' <<<"$out_rs")" -eq 8 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL resigned-baseline:"; echo "$out_rs" | sed 's/^/    /'; fi
+  if [ "$(grep -c '^PASS' <<<"$out_rs")" -eq 9 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL resigned-baseline:"; echo "$out_rs" | sed 's/^/    /'; fi
   cp "$apk" "$tmp/m-missing.apk"; zip -qd "$tmp/m-missing.apk" "$victim"
   resign "$tmp/m-missing.apk" "$tmp/m-missing.s.apk"; only5 content-missing "$tmp/m-missing.s.apk"
   mkdir -p "$tmp/x/$pk"; printf 'MILKDROP_PRESET_VERSION=201\n' > "$tmp/x/$pk/Koggles - Extra.milk"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Static verification of a release APK before it is published: signature and pinned cert, version,
-# native libs, bundled content, JNI upcalls surviving R8, not debuggable, size.
+# native libs, bundled content, JNI upcalls surviving R8, not debuggable, size, launcher icon.
 #   verify-release-apk.sh <apk> <mapping.txt> <versionName> <versionCode> <certSha256>
-# Prints "PASS n <check>" / "FAIL n <check>: <why>" per check; exits 0 only if all 8 pass.
+# Prints "PASS n <check>" / "FAIL n <check>: <why>" per check; exits 0 only if all 9 pass.
 # Env: MAX_APK_MB (default 15), ALLOWLIST (default app/bundled-presets.txt), BUILD_TOOLS (default
 # $ANDROID_HOME/build-tools/36.0.0). Signer parsing lives in parse-signer.sh (tested with fixtures).
 set -uo pipefail
@@ -98,5 +98,12 @@ if grep -q '^application-debuggable' <<<"$badging"; then bad 7 not-debuggable "a
 # 8 size
 mb=$(( $(stat -c %s "$apk") / 1024 / 1024 ))
 if [ "$mb" -lt "${MAX_APK_MB:-15}" ]; then ok 8 size "(${mb} MB)"; else bad 8 size "${mb} MB >= ${MAX_APK_MB:-15} MB"; fi
+# 9 icon: the manifest names a launcher icon (badging reads the resource table), the file it points at is really
+# in the APK (badging alone would not notice a stripped entry), and the packaged manifest declares a roundIcon.
+# The icon path comes from badging, not a literal: release builds may shorten resource paths.
+icon_path="$(sed -nE "s/^application: .*icon='([^']*)'.*/\1/p" <<<"$badging" | head -1)"
+has_round="$("$bt/aapt2" dump xmltree --file AndroidManifest.xml "$apk" 2>/dev/null | grep -c 'android:roundIcon')"
+if [ -n "$icon_path" ] && grep -qFx "$icon_path" <<<"$entries" && [ "$has_round" -gt 0 ]; then ok 9 icon "($icon_path, roundIcon declared)"
+else bad 9 icon "badging icon='${icon_path:-none}', entry present: $(grep -cFx "${icon_path:-/}" <<<"$entries"), roundIcon attrs: ${has_round:-0}"; fi
 
 [ "$failures" -eq 0 ]
