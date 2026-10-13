@@ -5,7 +5,8 @@
 # centre, and the rasters (lossy WebP, quality 90) stay under 300 KB in total. Needs ImageMagick with WebP.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"; res="$root/app/src/main/res"; fail=0
-# ImageMagick 7 locally (`magick`); GitHub's ubuntu runners ship ImageMagick 6 (`convert`/`identify`).
+# ImageMagick 7 locally (`magick`); CI installs Ubuntu's ImageMagick 6 (`convert`/`identify`) in its own step,
+# since GitHub's ubuntu-24.04 image ships neither.
 if command -v magick >/dev/null 2>&1; then IM=magick; IDENT="magick identify"
 elif command -v convert >/dev/null 2>&1; then IM=convert; IDENT=identify
 else echo "FAIL launcher-icon: ImageMagick (magick or convert) not found"; exit 1; fi
