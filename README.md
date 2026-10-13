@@ -1,5 +1,7 @@
 # Koggles
 
+![Koggles: a person in a phone VR headset in front of neon music visuals](images/KogglesREADMEBanner.png)
+
 Koggles is an Android music visualizer built on [projectM](https://github.com/projectM-visualizer/projectm),
 the open-source reimplementation of Winamp's MilkDrop. It reacts to whatever your phone is playing
 and runs full screen, or in **goggles mode**: side-by-side with lens correction, for phone VR mounts
