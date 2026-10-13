@@ -1,6 +1,7 @@
 package dev.koggles.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,7 +71,8 @@ fun MenuOverlay(model: MenuModel, actions: MenuActions, highlightChooseFolder: B
                 .widthIn(max = 520.dp).fillMaxWidth().fillMaxHeight()
                 .blockTouchesBelow(),
             shape = MaterialTheme.shapes.large,
-            tonalElevation = 4.dp,
+            tonalElevation = 4.dp, // a no-op with KogglesColors' black surfaceTint; harmless if the tint changes
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), // the neon edge of the black panel
         ) {
             Column {
                 MenuTitleBar(onClose)
