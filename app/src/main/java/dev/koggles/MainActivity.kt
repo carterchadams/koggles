@@ -47,6 +47,8 @@ import dev.koggles.ui.menu.MenuActions
 import dev.koggles.ui.visualizerGestures
 import kotlinx.coroutines.flow.first
 import dev.koggles.ui.Explainer
+import dev.koggles.ui.KogglesTheme
+import dev.koggles.ui.LaunchSplash
 import dev.koggles.ui.UnsupportedScreen
 import dev.koggles.ui.isGles3Supported
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -93,12 +95,13 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         if (!isGles3Supported(this)) {
-            setContent { UnsupportedScreen() }
+            setContent { KogglesTheme { UnsupportedScreen() } }
             return
         }
         val view = VisualizerView(this).also { visualizerView = it }
         DebugHooks.install(this)
         setContent {
+          KogglesTheme {
             val snapshot by audio.snapshot.collectAsStateWithLifecycle()
             val values by AppGraph.settings.values.collectAsStateWithLifecycle(SettingsValues())
             val menuOpen by AppGraph.menu.open.collectAsStateWithLifecycle()
@@ -128,7 +131,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                LaunchSplash() // the logo fade, over everything, once per launch
             }
+          }
         }
         lifecycleScope.launch { promptForFolderOnce() }
         lifecycleScope.launch {
