@@ -192,7 +192,7 @@ class MenuTest {
 
     @Test fun titleBar_staysVisibleWhenScrolled() = assertTitleBarVisibleAfterScroll()
 
-    @Test fun titleBar_staysVisibleWhenScrolled_landscape() {
+    @Test fun titleBar_staysVisibleWhenScrolled_openedFromGogglesMode() {
         runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
         compose.waitUntil(5_000) {
             compose.activity.resources.configuration.orientation ==
@@ -208,6 +208,83 @@ class MenuTest {
             compose.activity.requestedOrientation ==
                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+    }
+
+    // ---- orientation (the author, 2026-10-13: the menu is portrait whenever it is open) ----
+
+    private fun requested() = compose.activity.requestedOrientation
+    private fun orientation() = compose.activity.resources.configuration.orientation
+    private fun awaitRequested(expected: Int, what: String) {
+        val deadline = System.currentTimeMillis() + 3_000
+        while (System.currentTimeMillis() < deadline && requested() != expected) Thread.sleep(50)
+        assertEquals("$what: requestedOrientation", expected, requested())
+    }
+    private fun awaitOrientation(expected: Int, what: String) {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline && orientation() != expected) Thread.sleep(50)
+        assertEquals("$what: configuration.orientation", expected, orientation())
+        compose.waitForIdle()
+    }
+    private fun gogglesOn() {
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_LANDSCAPE, "goggles on")
+    }
+    private fun gogglesOff() {
+        runBlocking { AppGraph.settings.update { it.copy(goggles = false) } }
+        compose.waitUntil(5_000) { requested() == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+    }
+
+    @Test fun menuOpen_locksPortrait_normalMode() {
+        openMenu()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "open in normal mode")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_PORTRAIT, "open in normal mode")
+        compose.runOnUiThread { AppGraph.menu.close() }
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, "closed in normal mode")
+    }
+
+    @Test fun menuOpen_locksPortrait_gogglesMode_andRestoresLandscape() {
+        gogglesOn()
+        openMenu()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "open in goggles mode")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_PORTRAIT, "open in goggles mode")
+        assertTrue(AppGraph.renderCommands.state.value.menuPreview)
+        assertFalse(AppGraph.renderCommands.state.value.effectiveGoggles)
+        compose.runOnUiThread { AppGraph.menu.close() }
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, "closed in goggles mode")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_LANDSCAPE, "closed in goggles mode")
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        gogglesOff()
+    }
+
+    /** Round 1 B2: a pause/resume with the menu open (back from the QR scanner) must not rotate it back to landscape. */
+    @Test fun menuOpen_gogglesMode_survivesPauseResume() {
+        gogglesOn()
+        openMenu()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "open in goggles mode")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_PORTRAIT, "open in goggles mode")
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        compose.waitForIdle()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "after pause/resume")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_PORTRAIT, "after pause/resume")
+        assertTrue(AppGraph.renderCommands.state.value.menuPreview)
+        assertFalse(AppGraph.renderCommands.state.value.effectiveGoggles)
+        compose.runOnUiThread { AppGraph.menu.close() }
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        gogglesOff()
+    }
+
+    /** Round 1 B2: goggles switched on inside the open menu, then closed at once: the final state is landscape goggles. */
+    @Test fun menuOpen_toggleGoggles_thenClose_landsInLandscape() {
+        openMenu()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "open in normal mode")
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } } // what the Goggles mode switch commits
+        compose.runOnUiThread { AppGraph.menu.close() }
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, "closed after toggling goggles")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_LANDSCAPE, "closed after toggling goggles")
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        gogglesOff()
     }
 
     /** Double tap only opens the menu, never closes it, and the scrim passes nothing to the visualization. */
