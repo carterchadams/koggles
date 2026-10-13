@@ -155,11 +155,15 @@ class MenuTest {
         }
     }
 
-    /** The texts of the list's composed children, top to bottom by layout position (a lazy list's child order is composition order). */
+    /**
+     * The texts of the list's composed children, top to bottom by layout position (a lazy list's child
+     * order is composition order), skipping nodes without text (a switch shares its row's top edge).
+     */
     private fun listTextsByPosition(): List<String> =
         compose.onNodeWithTag("menu-list").onChildren().fetchSemanticsNodes()
             .sortedBy { it.boundsInRoot.top }
-            .map { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text } ?: "" }
+            .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text } }
+            .filter { it.isNotEmpty() }
 
     /** The author (2026-10-13): Goggles mode is the top-most option; licences sit at the very bottom, below Audio. */
     @Test fun menuOrder_gogglesModeFirst_licensesLast() {
