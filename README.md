@@ -138,7 +138,7 @@ the build prints a warning. Publishing releases is described in [RELEASING.md](R
 | Unit | `./gradlew :app:testDebugUnitTest` |
 | Instrumented (device or emulator) | `./gradlew :app:connectedDebugAndroidTest` |
 | Host C++ (with TSAN) | `cmake -S native-tests -B build/host-tests && cmake --build build/host-tests -j && ctest --test-dir build/host-tests` |
-| Bundled-preset shader gate | `./gradlew :app:connectedDebugAndroidTest -PkogglesShaderDiagnostics -Pandroid.testInstrumentationRunnerArguments.class=dev.koggles.BundledPresetsCompileTest` |
+| Bundled-preset compile sweep (at will, not part of the instrumented suite) | `tools/ci/preset-sweep.sh` loads every bundled preset; `tools/ci/preset-sweep.sh --shaders` adds the shader gate (`-PkogglesShaderDiagnostics`) |
 | Release tooling | `tools/ci/test-*.sh` |
 
 Useful build switches for device work: `-PkogglesAppIdSuffix=.sweep` installs a build beside the
