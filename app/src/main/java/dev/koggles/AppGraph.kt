@@ -31,7 +31,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import dev.koggles.playback.Playlist
 import dev.koggles.render.LensState
+import dev.koggles.settings.effectiveLensOffsetMm
 import dev.koggles.render.TransitionState
+import dev.koggles.render.WideSpacingDefaults
 import dev.koggles.render.NativeRendererPort
 import dev.koggles.render.RenderCommands
 import dev.koggles.settings.Settings
@@ -80,6 +82,9 @@ object AppGraph {
         private set
 
     lateinit var folderPicker: dev.koggles.presets.FolderPicker
+        private set
+
+    lateinit var wideSpacingDefaults: WideSpacingDefaults
         private set
 
     @Volatile private var playbackOverride: PlaybackControls? = null
@@ -190,7 +195,8 @@ object AppGraph {
                     TransitionState(v.softCut, v.blendSec, v.presetDurationSec, v.hardCutsOnBeat, v.locked),
                 )
                 renderCommands.setGoggles(v.goggles)
-                renderCommands.setLens(LensState(v.lensOffsetMm, v.distortion))
+                renderCommands.setLens(LensState(v.effectiveLensOffsetMm(), v.distortion, v.wideView))
+                if (!v.goggles) renderCommands.setCalibration(false)  // calibration lives in goggles mode only
             }
         }
         folderPicker = dev.koggles.presets.FolderPicker(
@@ -201,6 +207,19 @@ object AppGraph {
             onFailed = { libraryRepo.reportError(it) },
         )
         menu = MenuState(setPreview = renderCommands::setMenuPreview, dispatch = audio::dispatch)
+        appScope.launch { menu.open.collect { open -> if (open) renderCommands.setCalibration(false) } }
+        wideSpacingDefaults = WideSpacingDefaults(
+            settings = settings,
+            inputs = {
+                // Goggles mode is landscape and full screen: the display's long side is the width.
+                val (w, h) = displaySizePx()
+                WideSpacingDefaults.Inputs(maxOf(w, h), minOf(w, h), NativeBridge.viewerParamsDigest().toString())
+            },
+            frameCentreX = NativeBridge::lensFrameCentreX,
+            scope = appScope,
+            compute = Dispatchers.Default,
+        )
+        wideSpacingDefaults.start()
         appScope.launch {
             audio.snapshot.map { it.state == AudioState.Active }.distinctUntilChanged().collectLatest { active ->
                 _silenceHint.value = false
@@ -215,4 +234,17 @@ object AppGraph {
     }
 
     private const val SILENCE_SAMPLE_MS = 250L
+
+    /** The whole default display in pixels (what a full-screen surface gets), in its current rotation. */
+    private fun displaySizePx(): Pair<Int, Int> {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val b = app.getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.bounds
+            return b.width() to b.height()
+        }
+        val p = android.graphics.Point()
+        @Suppress("DEPRECATION")
+        app.getSystemService(android.hardware.display.DisplayManager::class.java)
+            .getDisplay(android.view.Display.DEFAULT_DISPLAY).getRealSize(p)
+        return p.x to p.y
+    }
 }

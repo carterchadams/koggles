@@ -18,6 +18,8 @@ class MenuActions(
     val onChooseFolder: () -> Unit,
     val onRescan: () -> Unit,
     val onScanQr: () -> Unit,
+    /** Spacing calibration: closes the menu and shows the bullseyes (the volume keys then step the spacing). */
+    val onCalibrateSpacing: () -> Unit,
 ) {
     fun updateSettings(f: (SettingsValues) -> SettingsValues) {
         scope.launch { settings.update(f) }

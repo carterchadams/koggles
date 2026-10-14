@@ -1,6 +1,7 @@
 package dev.koggles.render
 
-data class LensState(val offsetMm: Float = 0f, val distortion: Boolean = true)
+/** [wideView]: 0 normal, 1 the profile's field of view opened to the screen edges, 2 also a window per eye. */
+data class LensState(val offsetMm: Float = 0f, val distortion: Boolean = true, val wideView: Int = 0)
 
 data class TransitionState(
     val softCut: Boolean = true,
@@ -18,6 +19,8 @@ data class RenderState(
     val goggles: Boolean = false,
     val menuPreview: Boolean = false,
     val lens: LensState = LensState(),
+    /** Spacing calibration (bullseyes in place of the visualizer); never persisted, goggles mode only. */
+    val calibration: Boolean = false,
     val transition: TransitionState = TransitionState(),
     val texturePaths: List<String> = emptyList(),
 ) {

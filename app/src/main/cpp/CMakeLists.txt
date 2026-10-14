@@ -52,6 +52,7 @@ add_library(koggles SHARED
     jni/upcalls.cpp
     renderer/engine.cpp
     renderer/eye_capture.cpp
+    renderer/bullseye.cpp
     renderer/quad.cpp
     renderer/goggles.cpp
     renderer/renderer.cpp

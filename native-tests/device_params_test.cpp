@@ -93,3 +93,54 @@ TEST(DeviceParams, MalformedReturnsInput) {
     in.resize(in.size() - 2);  // truncate field 4's fixed32 payload
     EXPECT_EQ(withInterLensOffset(in, 2.0f), in);
 }
+
+// ---- withFieldOfView (wide view): field 5, packed repeated float [outer, inner, bottom, top] in degrees ----
+
+namespace {
+Bytes field5(float a, float b, float c, float d) { Bytes out{0x2A, 0x10}; putFloat(out, a); putFloat(out, b); putFloat(out, c); putFloat(out, d); return out; }
+}  // namespace
+
+TEST(DeviceParams, FieldOfViewReplacesExisting) {
+    const Bytes in = concat({field3(), field5(40, 40, 40, 40), field4(0.064f), field7()});
+    const Bytes out = withFieldOfView(in, 90, 80, 70, 60);
+    // Every other field byte-identical and in order; the new field 5 appended at the end.
+    const Bytes rest = concat({field3(), field4(0.064f), field7()});
+    ASSERT_EQ(out.size(), rest.size() + 18);
+    EXPECT_TRUE(std::equal(rest.begin(), rest.end(), out.begin()));
+    EXPECT_EQ(out[rest.size()], 0x2A);
+    EXPECT_EQ(out[rest.size() + 1], 16);
+    EXPECT_FLOAT_EQ(getFloat(out, rest.size() + 2), 90);
+    EXPECT_FLOAT_EQ(getFloat(out, rest.size() + 6), 80);
+    EXPECT_FLOAT_EQ(getFloat(out, rest.size() + 10), 70);
+    EXPECT_FLOAT_EQ(getFloat(out, rest.size() + 14), 60);
+}
+
+TEST(DeviceParams, FieldOfViewAppendsWhenMissing) {
+    const Bytes in = sample();
+    const Bytes out = withFieldOfView(in, 90, 90, 90, 90);
+    ASSERT_EQ(out.size(), in.size() + 18);
+    EXPECT_TRUE(std::equal(in.begin(), in.end(), out.begin()));
+    EXPECT_EQ(out[in.size()], 0x2A);
+    EXPECT_FLOAT_EQ(getFloat(out, in.size() + 2), 90);
+}
+
+TEST(DeviceParams, FieldOfViewDropsEveryOldCopy) {
+    // Two field-5 occurrences (protobuf last-one-wins on the wire): both go, one new one comes.
+    const Bytes in = concat({field5(1, 2, 3, 4), field3(), field5(5, 6, 7, 8)});
+    const Bytes out = withFieldOfView(in, 90, 90, 90, 90);
+    ASSERT_EQ(out.size(), field3().size() + 18);
+    EXPECT_EQ(out[0], 0x1D);
+    EXPECT_EQ(out[field3().size()], 0x2A);
+}
+
+TEST(DeviceParams, FieldOfViewMalformedReturnsInput) {
+    Bytes in = concat({field3(), field5(40, 40, 40, 40)});
+    in.resize(in.size() - 3);  // truncated packed payload
+    EXPECT_EQ(withFieldOfView(in, 90, 90, 90, 90), in);
+}
+
+TEST(DeviceParams, FieldOfViewComposesWithInterLensOffset) {
+    const Bytes out = withFieldOfView(withInterLensOffset(sample(), 2.0f), 90, 90, 90, 90);
+    EXPECT_NEAR(getFloat(out, 6), 0.066f, 1e-6);
+    EXPECT_EQ(out[sample().size()], 0x2A);
+}
