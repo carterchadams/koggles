@@ -34,12 +34,17 @@ class CalibrationTapTest {
     private val gestures get() = compose.onNodeWithTag("visualizer-gestures")
     private val commands get() = AppGraph.renderCommands
 
-    /** The explainer is an opaque overlay (touches never reach the visualization): accept it. */
+    /**
+     * The explainer and the audio error screens are opaque overlays (touches never reach the visualization):
+     * accept the explainer and wait for Active. The fake audio source (installed before the launch) keeps the
+     * phone's real audio out of it: on the author's phone another app held the Visualizer, and the error
+     * screen swallowed the taps.
+     */
     @Before fun setUp() {
         if (AppGraph.audio.snapshot.value.state == AudioState.ShowingExplainer) {
             compose.runOnUiThread { AppGraph.audio.dispatch(AudioEvent.ExplainerAccepted) }
         }
-        compose.waitUntil(5_000) { AppGraph.audio.snapshot.value.state != AudioState.ShowingExplainer }
+        compose.waitUntil(10_000) { AppGraph.audio.snapshot.value.state == AudioState.Active }
         compose.runOnUiThread { AppGraph.menu.close() }
         runBlocking { AppGraph.settings.update { it.copy(goggles = true, singleTapNext = true) } }
         // The goggles setting has reached the renderer and the landscape layout has settled before any tap.
@@ -100,9 +105,11 @@ class CalibrationTapTest {
             // No first-run folder prompt and no explainer: the tests tap the visualization directly.
             runBlocking { AppGraph.settings.update { it.copy(folderPrompted = true, explainerSeen = true) } }
             AppGraph.overrideForTest(playback = fake)
+            FakeAudio.install()
         }
 
         @AfterClass @JvmStatic fun tearDownClass() {
+            FakeAudio.uninstall()
             AppGraph.overrideForTest(playback = null)
         }
     }
