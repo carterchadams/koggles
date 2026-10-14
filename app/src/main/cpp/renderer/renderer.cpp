@@ -60,9 +60,10 @@ void Renderer::setProjectMSize(int w, int h) {
 
 void Renderer::setGoggles(bool on) { goggles_.store(on); }
 
-void Renderer::setLens(float offsetMm, bool distortion, float xdpi) {
+void Renderer::setLens(float offsetMm, bool distortion, float xdpi, int wideView) {
     lensOffsetMm_ = offsetMm;
     lensDistortion_ = distortion;
+    wideView_ = wideView;
     xdpi_ = xdpi;
 }
 
@@ -92,13 +93,17 @@ void Renderer::drawFrame() {
         const int eyeH = height_;
         setProjectMSize(eyeW, eyeH);
         eye_.begin(eyeW, eyeH);
-        projectm_opengl_render_frame(pm_);
+        if (calibration_.load()) {
+            bullseye_.draw(0, 0, eyeW, eyeH);  // the spacing calibration target in place of the frame
+        } else {
+            projectm_opengl_render_frame(pm_);
+        }
         const GLuint eyeTexture = eye_.end();
         // Read the copy's error now: Cardboard's draw calls glGetError internally and would
         // clear it, which is how a failing eye copy once went unnoticed (black goggles mode).
         const GLenum copyError = glGetError();
         if (copyError != GL_NO_ERROR) eyeCopyErrors_.fetch_add(1);
-        goggles2d_.configure(width_, height_, xdpi_, lensOffsetMm_, lensDistortion_);
+        goggles2d_.configure(width_, height_, xdpi_, lensOffsetMm_, lensDistortion_, wideView_);
         goggles2d_.draw(eyeTexture);
         const GLenum drawError = glGetError();
         lastGlError_ = static_cast<int>(copyError != GL_NO_ERROR ? copyError : drawError);

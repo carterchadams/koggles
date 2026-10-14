@@ -145,8 +145,13 @@ Java_dev_koggles_NativeBridge_rendererSetGoggles(JNIEnv*, jobject, jlong h, jboo
 
 JNIEXPORT void JNICALL
 Java_dev_koggles_NativeBridge_rendererSetLens(JNIEnv*, jobject, jlong h, jfloat offsetMm, jboolean distortion,
-                                              jfloat xdpi) {
-    if (h != 0) asRenderer(h)->setLens(offsetMm, distortion == JNI_TRUE, xdpi);
+                                              jfloat xdpi, jint wideView) {
+    if (h != 0) asRenderer(h)->setLens(offsetMm, distortion == JNI_TRUE, xdpi, static_cast<int>(wideView));
+}
+
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetCalibration(JNIEnv*, jobject, jlong h, jboolean on) {
+    if (h != 0) asRenderer(h)->setCalibration(on == JNI_TRUE);
 }
 
 JNIEXPORT jboolean JNICALL
@@ -175,6 +180,16 @@ Java_dev_koggles_NativeBridge_rendererFrameStats(JNIEnv* env, jobject, jlong h) 
 JNIEXPORT jint JNICALL
 Java_dev_koggles_NativeBridge_viewerParamsChangedCount(JNIEnv*, jobject) {
     return CardboardQrCode_getDeviceParamsChangedCount();
+}
+
+JNIEXPORT jlong JNICALL
+Java_dev_koggles_NativeBridge_viewerParamsDigest(JNIEnv*, jobject) {
+    return static_cast<jlong>(koggles::viewerParamsDigest());
+}
+
+JNIEXPORT jfloat JNICALL
+Java_dev_koggles_NativeBridge_lensFrameCentreX(JNIEnv*, jobject, jint displayW, jint displayH, jfloat offsetMm, jint wideView) {
+    return koggles::frameCentreScreenX(displayW, displayH, offsetMm, wideView);
 }
 
 JNIEXPORT void JNICALL

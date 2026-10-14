@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.testTag
 import dev.koggles.settings.SettingsValues
+import dev.koggles.settings.withSpacingStep
 import dev.koggles.ui.AudioErrorScreen
 import dev.koggles.ui.MenuModel
 import dev.koggles.ui.MenuOverlay
@@ -142,6 +143,15 @@ class MainActivity : ComponentActivity() {
                 audio.uiEffects.collect(::handleUiEffect)
             }
         }
+        // Spacing calibration: the system Back ends it (the back dispatcher, which is how Back arrives with
+        // predictive back on Android 16 and this target; KEYCODE_BACK below covers devices that still send it).
+        val endCalibration = object : androidx.activity.OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() { AppGraph.renderCommands.setCalibration(false) }
+        }
+        onBackPressedDispatcher.addCallback(this, endCalibration)
+        lifecycleScope.launch {
+            AppGraph.renderCommands.state.map { it.calibration }.distinctUntilChanged().collect { endCalibration.isEnabled = it }
+        }
         lifecycleScope.launch {
             // One writer of requestedOrientation: the mode and the menu together (menu open = portrait).
             combine(AppGraph.renderCommands.state.map { it.goggles }, AppGraph.menu.open, ::orientationFor)
@@ -181,6 +191,10 @@ class MainActivity : ComponentActivity() {
                 },
                 onRescan = { AppGraph.libraryRepo.refresh() },
                 onScanQr = ::scanViewerQr,
+                onCalibrateSpacing = {
+                    AppGraph.renderCommands.setCalibration(true)
+                    AppGraph.menu.close()
+                },
             )
         }
         MenuOverlay(
@@ -227,6 +241,29 @@ class MainActivity : ComponentActivity() {
         AppGraph.appScope.launch { AppGraph.libraryRepo.revalidate() }
     }
 
+    /**
+     * Spacing calibration keys: while the bullseyes are up, volume up/down step the current view's spacing by
+     * 0.5 mm (consumed, so the volume does not change) and Back ends the calibration. Otherwise every key is the
+     * system's.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (DebugHooks.onKeyEvent(this, event)) return true
+        if (!AppGraph.renderCommands.state.value.calibration) return super.dispatchKeyEvent(event)
+        val step = when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> 0.5f
+            KeyEvent.KEYCODE_VOLUME_DOWN -> -0.5f
+            KeyEvent.KEYCODE_BACK -> {
+                if (event.action == KeyEvent.ACTION_UP) AppGraph.renderCommands.setCalibration(false)
+                return true
+            }
+            else -> return super.dispatchKeyEvent(event)
+        }
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            lifecycleScope.launch { AppGraph.settings.update { it.withSpacingStep(step) } }
+        }
+        return true
+    }
+
     override fun onStop() {
         audio.dispatch(AudioEvent.ActivityStopped)
         super.onStop()
@@ -242,6 +279,8 @@ class MainActivity : ComponentActivity() {
             }
             qrCountBeforeScan = -1
         }
+        // A new viewer profile (or a new display) changes the wide views' default spacing.
+        AppGraph.wideSpacingDefaults.recheck()
         // Back from another activity (the QR scanner): the same rule, menu state included.
         requestedOrientation = orientationFor(AppGraph.renderCommands.state.value.goggles, AppGraph.menu.open.value)
     }
@@ -251,9 +290,6 @@ class MainActivity : ComponentActivity() {
         qrCountBeforeScan = ViewerQr.changedCount()
         ViewerQr.scan(this)
     }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
-        DebugHooks.onKeyEvent(this, event) || super.dispatchKeyEvent(event)
 
     override fun onPause() {
         visualizerView?.onPause()

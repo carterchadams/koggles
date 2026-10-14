@@ -57,7 +57,9 @@ object NativeBridge {
         h: Long, softCut: Boolean, blendSec: Double, presetDurationSec: Int, hardCuts: Boolean, locked: Boolean,
     )
     external fun rendererSetGoggles(h: Long, on: Boolean)
-    external fun rendererSetLens(h: Long, offsetMm: Float, distortion: Boolean, xdpi: Float)
+    external fun rendererSetLens(h: Long, offsetMm: Float, distortion: Boolean, xdpi: Float, wideView: Int)
+    /** Spacing calibration: goggles mode shows a bullseye per eye instead of the visualizer while on. */
+    external fun rendererSetCalibration(h: Long, on: Boolean)
 
     /** Diagnostic, any thread: whether the renderer is in goggles mode. */
     external fun rendererGogglesActive(h: Long): Boolean
@@ -67,6 +69,15 @@ object NativeBridge {
 
     /** Cardboard's counter of saved viewer-profile changes (increments after a QR scan). */
     external fun viewerParamsChangedCount(): Int
+
+    /** A digest of the saved viewer profile's bytes (persistable, unlike the counter); 0 if unavailable. */
+    external fun viewerParamsDigest(): Long
+
+    /**
+     * Any thread, no GL. Where the frame centre lands on screen for the left eye (full-screen x in 0..1) under the
+     * lens the renderer would build for [offsetMm] and [wideView] on a [displayW] x [displayH] display; NaN if none.
+     */
+    external fun lensFrameCentreX(displayW: Int, displayH: Int, offsetMm: Float, wideView: Int): Float
 
     /** Receives renderer events on the main thread. */
     @Volatile

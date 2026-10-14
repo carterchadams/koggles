@@ -16,7 +16,9 @@ import kotlin.math.abs
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -76,6 +78,7 @@ class MenuTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     private val menu get() = compose.onNodeWithTag("menu")
+    private val CALIBRATE = "Configure spacing with volume buttons"
 
     /** The explainer is an opaque overlay (touches never reach the visualization): accept it. */
     @Before fun passExplainer() {
@@ -88,6 +91,7 @@ class MenuTest {
 
     @After fun closeMenu() {
         compose.runOnUiThread { AppGraph.menu.close() }
+        AppGraph.renderCommands.setCalibration(false)
         runBlocking { AppGraph.settings.update { it.copy(singleTapNext = true, goggles = false) } }
         fake.nexts.set(0); fake.skips.set(0)
     }
@@ -292,6 +296,81 @@ class MenuTest {
         openMenu()
         val found = runCatching { scrollTo(hasText("Transition interstitials")) }.isSuccess
         assertFalse("row present: Transition interstitials", found)
+    }
+
+    // ---- Wide view (the author, 2026-10-13): three views, a lens spacing per view ----
+
+    private fun lensSpacingLabel(): String =
+        compose.onNode(hasText("Lens spacing", substring = true)).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+
+    /** The chips pick the view and the slider shows and edits that view's own spacing. */
+    @Test fun wideViewChips_switchTheSpacingSlider() {
+        // Set by hand (manual flags), else the computed defaults replace these values for the new normal spacing.
+        runBlocking {
+            AppGraph.settings.update {
+                it.copy(wideView = 0, lensOffsetMm = 1f, lensOffsetWideMm = 22f, lensOffsetWideWindowMm = 8.5f, wideSpacingManual = true, wideWindowSpacingManual = true)
+            }
+        }
+        openMenu()
+        // Goggles mode switched on inside the open menu: the menu stays portrait, so no rotation (injected touches
+        // after a rotation land outside the stale window and fail).
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
+        compose.waitForIdle()
+        // "Off" also names a preset-duration chip: match inside the wide-view row.
+        fun pick(chip: String, mode: Int, label: String) {
+            val node = hasText(chip) and hasAnyAncestor(hasTestTag("wide-view"))
+            scrollTo(node)
+            compose.onNode(node).performClick()
+            compose.waitUntil(3_000) { runBlocking { AppGraph.settings.values.first().wideView } == mode }
+            compose.waitForIdle()
+            assertEquals(label, lensSpacingLabel())
+        }
+        scrollTo(hasText("Wide view"))
+        assertEquals("Lens spacing: +1.0 mm", lensSpacingLabel())
+        pick("Wide", 1, "Lens spacing: +22.0 mm")
+        pick("Wide + window", 2, "Lens spacing: +8.5 mm")
+        pick("Off", 0, "Lens spacing: +1.0 mm")
+        compose.runOnUiThread { AppGraph.menu.close() }
+        gogglesOff()
+    }
+
+    /** Spacing calibration (the author, 2026-10-13): the button lives under Goggles mode only. */
+    @Test fun calibrateButton_presentOnlyWithGogglesOn() {
+        openMenu()
+        scrollTo(hasText("Goggles mode"))
+        compose.onAllNodesWithText(CALIBRATE).assertCountEquals(0)
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } } // inside the open menu: no rotation
+        compose.waitForIdle()
+        scrollTo(hasText(CALIBRATE))
+        compose.onNodeWithText(CALIBRATE).assertIsDisplayed()
+    }
+
+    /** Pressing it closes the menu and starts the calibration render. */
+    @Test fun calibrateButton_closesMenu_andStartsCalibration() {
+        openMenu()
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
+        compose.waitForIdle()
+        scrollTo(hasText(CALIBRATE))
+        compose.onNodeWithText(CALIBRATE).performClick()
+        compose.waitUntil(3_000) { !AppGraph.menu.open.value }
+        assertEquals(true, AppGraph.renderCommands.state.value.calibration)
+        // Goggles off ends it (the setting is the one writer of goggles mode).
+        gogglesOff()
+        compose.waitUntil(3_000) { !AppGraph.renderCommands.state.value.calibration }
+    }
+
+    /** The spacing slider spans -10..40 mm (wide view on a wide phone needs about +28). */
+    @Test fun lensSpacingSlider_spansMinus10To40() {
+        openMenu()
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } } // inside the open menu: no rotation
+        compose.waitForIdle()
+        scrollTo(hasText("Lens spacing", substring = true))
+        val spacingSlider = SemanticsMatcher("the Lens spacing slider") {
+            it.config.getOrNull(SemanticsProperties.ProgressBarRangeInfo)?.range == -10f..40f
+        }
+        compose.onNode(spacingSlider).assertExists()
+        compose.runOnUiThread { AppGraph.menu.close() }
+        gogglesOff()
     }
 
     /** Double tap only opens the menu, never closes it, and the scrim passes nothing to the visualization. */

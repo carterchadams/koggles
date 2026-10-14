@@ -11,6 +11,7 @@ interface RendererPort {
     fun setTransition(h: Long, t: TransitionState)
     fun setGoggles(h: Long, on: Boolean)
     fun setLens(h: Long, lens: LensState)
+    fun setCalibration(h: Long, on: Boolean)
     fun load(h: Long, data: String, requestId: Long, smooth: Boolean)
     fun loadIdle(h: Long, requestId: Long)
 }
@@ -22,7 +23,8 @@ class NativeRendererPort(private val xdpi: Float) : RendererPort {
         NativeBridge.rendererSetTransition(h, t.softCut, t.blendSec, t.presetDurationSec, t.hardCutsOnBeat, t.locked)
     override fun setGoggles(h: Long, on: Boolean) = NativeBridge.rendererSetGoggles(h, on)
     override fun setLens(h: Long, lens: LensState) =
-        NativeBridge.rendererSetLens(h, lens.offsetMm, lens.distortion, xdpi)
+        NativeBridge.rendererSetLens(h, lens.offsetMm, lens.distortion, xdpi, lens.wideView)
+    override fun setCalibration(h: Long, on: Boolean) = NativeBridge.rendererSetCalibration(h, on)
     override fun load(h: Long, data: String, requestId: Long, smooth: Boolean) =
         NativeBridge.rendererLoadPresetData(h, data, requestId, smooth)
     override fun loadIdle(h: Long, requestId: Long) = NativeBridge.rendererLoadIdle(h, requestId)
@@ -96,6 +98,12 @@ class RenderCommands(private val native: RendererPort) : dev.koggles.playback.Re
         it.copy(lens = lens) to { h: Long -> native.setLens(h, lens) }
     }
 
+    /** Spacing calibration on or off (the bullseyes); a no-op when already in that state. */
+    fun setCalibration(on: Boolean) = mutate {
+        if (it.calibration == on) return@mutate null
+        it.copy(calibration = on) to { h: Long -> native.setCalibration(h, on) }
+    }
+
     fun setTransition(t: TransitionState) = mutate {
         it.copy(transition = t) to { h: Long -> native.setTransition(h, t) }
     }
@@ -119,6 +127,7 @@ class RenderCommands(private val native: RendererPort) : dev.koggles.playback.Re
         native.setTransition(handle, snapshot.transition)
         native.setGoggles(handle, snapshot.effectiveGoggles)
         native.setLens(handle, snapshot.lens)
+        native.setCalibration(handle, snapshot.calibration)
         snapshot.preset?.let { p ->
             if (p.data == null) native.loadIdle(handle, p.requestId)
             else native.load(handle, p.data, p.requestId, false)

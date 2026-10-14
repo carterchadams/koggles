@@ -11,6 +11,11 @@ such as Google Cardboard and its many look-alikes.
   [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), and the MilkDrop texture pack.
 - **Your own packs:** choose a folder once (for example `Documents/Koggles/<pack>/…`) and its
   presets join the rotation.
+- **Wide view (goggles mode):** the picture opens out to the edges of the screen instead of
+  stopping at the viewer's nominal field of view; *Wide + window* also gives each eye its own side
+  of the frame, so the outer periphery shows more of its own side. Each view keeps its own lens
+  spacing, with defaults computed for your phone and viewer, and *Configure spacing with volume
+  buttons* puts two bullseyes in the headset so you can tune it by eye.
 - **Gestures:** tap for the next preset; double-tap for the menu (playback, packs and browser,
   display, library, audio).
 - **Audio:** device audio only. *Standard* uses Android's Visualizer and needs one ordinary
@@ -66,8 +71,7 @@ The process is only worth describing because of what it caught. Some examples:
 
 Confirmed on the phone by the author: headset fit with the default settings, and Bluetooth audio
 driving the visuals. Still open: rendering performance on the phone has not been measured in
-goggles mode, transition durations have not been timed, and the release pipeline has not yet run
-on GitHub.
+goggles mode.
 
 ## Downloads
 
@@ -183,6 +187,6 @@ All licence texts are in the app under *Library → About & licenses*.
   it is free.
 - **High quality on Android 15+:** locking the phone ends the capture session, so High quality
   asks for consent again (one tap) on return. Standard does not.
-- **In the headset:** there is no in-headset menu yet; settings, lens spacing and preset changes
-  mean taking the phone out of the mount. Frame timing in goggles mode on a physical phone has
-  not been measured.
+- **In the headset:** lens spacing is per view: Off, Wide and Wide + window each keep their own,
+  because the wide views move the picture relative to the lenses. Frame timing in goggles mode on
+  a physical phone has not been measured.
