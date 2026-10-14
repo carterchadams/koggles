@@ -35,8 +35,9 @@ class EventTest {
     }
 
     @Test fun everySubclassIsCovered() {
-        val declared = Event::class.sealedSubclasses.map { it.simpleName }.toSet()
-        assertEquals(declared, all.map { it::class.simpleName }.toSet())
+        // Kotlin emits the JVM PermittedSubclasses attribute for a sealed class (jvmTarget 17), no kotlin-reflect needed.
+        val declared = Event::class.java.permittedSubclasses.map { it.simpleName }.toSet()
+        assertEquals(declared, all.map { it.javaClass.simpleName }.toSet())
     }
 
     @Test fun valuesAreIntsWithBooleansAsZeroOrOne() {
@@ -48,6 +49,6 @@ class EventTest {
             Event.AppStarted(source = Source.Standard, goggles = false, wideView = 0).props)
         assertEquals(mapOf("on" to 0), Event.GogglesToggled(on = false).props)
         assertEquals(mapOf("minutes" to 7), Event.SessionEnded(minutes = 7).props)
-        all.forEach { e -> e.props.values.forEach { v -> assertEquals(e.name, Int::class.javaObjectType, v.javaClass) } }
+        // The Int-only rule is the type of Event.props (Map<String, Int>): a String value does not compile.
     }
 }
