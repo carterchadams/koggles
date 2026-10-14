@@ -21,8 +21,6 @@ data class SettingsValues(
     val blendSec: Double = 3.0,
     val hardCutsOnBeat: Boolean = false,
     val locked: Boolean = false,
-    val interstitials: Boolean = true,
-    val interstitialSec: Int = 4,
     val singleTapNext: Boolean = true,
     val goggles: Boolean = false,
     val lensOffsetMm: Float = 0f,
@@ -41,7 +39,6 @@ val PRESET_DURATIONS = listOf(0, 15, 30, 60, 120)
 fun SettingsValues.clamped(): SettingsValues = copy(
     presetDurationSec = if (presetDurationSec in PRESET_DURATIONS) presetDurationSec else 30,
     blendSec = (blendSec.coerceIn(1.0, 10.0) * 2).roundToInt() / 2.0,
-    interstitialSec = interstitialSec.coerceIn(2, 10),
     lensOffsetMm = (lensOffsetMm.coerceIn(-10f, 10f) * 2).roundToInt() / 2f,
 )
 
@@ -58,8 +55,6 @@ class Settings(private val store: DataStore<Preferences>) {
             prefs[K.blendSec] = next.blendSec
             prefs[K.hardCutsOnBeat] = next.hardCutsOnBeat
             prefs[K.locked] = next.locked
-            prefs[K.interstitials] = next.interstitials
-            prefs[K.interstitialSec] = next.interstitialSec
             prefs[K.singleTapNext] = next.singleTapNext
             prefs[K.goggles] = next.goggles
             prefs[K.lensOffsetMm] = next.lensOffsetMm
@@ -81,8 +76,6 @@ class Settings(private val store: DataStore<Preferences>) {
             blendSec = p[K.blendSec] ?: d.blendSec,
             hardCutsOnBeat = p[K.hardCutsOnBeat] ?: d.hardCutsOnBeat,
             locked = p[K.locked] ?: d.locked,
-            interstitials = p[K.interstitials] ?: d.interstitials,
-            interstitialSec = p[K.interstitialSec] ?: d.interstitialSec,
             singleTapNext = p[K.singleTapNext] ?: d.singleTapNext,
             goggles = p[K.goggles] ?: d.goggles,
             lensOffsetMm = p[K.lensOffsetMm] ?: d.lensOffsetMm,
@@ -101,8 +94,8 @@ class Settings(private val store: DataStore<Preferences>) {
         val blendSec = doublePreferencesKey("settings.blendSec")
         val hardCutsOnBeat = booleanPreferencesKey("settings.hardCutsOnBeat")
         val locked = booleanPreferencesKey("settings.locked")
-        val interstitials = booleanPreferencesKey("settings.interstitials")
-        val interstitialSec = intPreferencesKey("settings.interstitialSec")
+        // settings.interstitials and settings.interstitialSec were removed with the feature (2026-10-13);
+        // a stale value in an existing install is ignored.
         val singleTapNext = booleanPreferencesKey("settings.singleTapNext")
         val goggles = booleanPreferencesKey("settings.goggles")
         val lensOffsetMm = floatPreferencesKey("settings.lensOffsetMm")

@@ -28,14 +28,13 @@ class LifecycleStressTest {
 
     /**
      * These tests check that one preset survives lifecycle churn. Real playback would
-     * auto-advance mid-test, so hold it: lock (stops projectM's timed switches) and wait out any
-     * interstitial (its own timer advances it even when locked).
+     * auto-advance mid-test, so hold it: lock (stops projectM's timed switches).
      */
     @Before
     fun holdPlayback() {
         runBlocking { AppGraph.settings.update { it.copy(locked = true) } }
         val deadline = System.nanoTime() + 15_000_000_000L
-        while (!commands.state.value.transition.locked || AppGraph.playback.nowPlaying.value.interstitial) {
+        while (!commands.state.value.transition.locked) {
             assertTrue("playback held", System.nanoTime() < deadline)
             Thread.sleep(50)
         }

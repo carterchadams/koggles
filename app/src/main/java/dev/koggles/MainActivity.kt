@@ -2,7 +2,6 @@ package dev.koggles
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
@@ -41,6 +40,7 @@ import dev.koggles.settings.SettingsValues
 import dev.koggles.ui.AudioErrorScreen
 import dev.koggles.ui.MenuModel
 import dev.koggles.ui.MenuOverlay
+import dev.koggles.ui.orientationFor
 import dev.koggles.ui.blockTouchesBelow
 import dev.koggles.ui.isAudioError
 import dev.koggles.ui.menu.MenuActions
@@ -51,6 +51,7 @@ import dev.koggles.ui.KogglesTheme
 import dev.koggles.ui.LaunchSplash
 import dev.koggles.ui.UnsupportedScreen
 import dev.koggles.ui.isGles3Supported
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -142,7 +143,9 @@ class MainActivity : ComponentActivity() {
             }
         }
         lifecycleScope.launch {
-            AppGraph.renderCommands.state.map { it.goggles }.distinctUntilChanged().collect { applyOrientation(it) }
+            // One writer of requestedOrientation: the mode and the menu together (menu open = portrait).
+            combine(AppGraph.renderCommands.state.map { it.goggles }, AppGraph.menu.open, ::orientationFor)
+                .distinctUntilChanged().collect { requestedOrientation = it }
         }
     }
 
@@ -239,18 +242,14 @@ class MainActivity : ComponentActivity() {
             }
             qrCountBeforeScan = -1
         }
-        applyOrientation(AppGraph.renderCommands.state.value.goggles)
+        // Back from another activity (the QR scanner): the same rule, menu state included.
+        requestedOrientation = orientationFor(AppGraph.renderCommands.state.value.goggles, AppGraph.menu.open.value)
     }
 
     /** Opens the viewer-profile QR scanner (headset setup). */
     fun scanViewerQr() {
         qrCountBeforeScan = ViewerQr.changedCount()
         ViewerQr.scan(this)
-    }
-
-    private fun applyOrientation(goggles: Boolean) {
-        requestedOrientation =
-            if (goggles) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
