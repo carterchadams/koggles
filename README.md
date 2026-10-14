@@ -18,6 +18,8 @@ such as Google Cardboard and its many look-alikes.
   buttons* puts two bullseyes in the headset so you can tune it by eye.
 - **Gestures:** tap for the next preset; double-tap for the menu (playback, packs and browser,
   display, library, audio).
+- **First launch:** the one screen before the audio permission carries a photosensitivity warning:
+  the visualizations include intense moving and flashing lights.
 - **Audio:** device audio only. *Standard* uses Android's Visualizer and needs one ordinary
   permission. *High quality* (opt-in) uses playback capture: "Higher fidelity; some apps block it
   and it asks again after locking".

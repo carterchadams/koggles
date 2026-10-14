@@ -166,6 +166,17 @@ class OverlayScrollTest {
         assertFalse(AppGraph.menu.open.value)
     }
 
+    /** The first-launch screen carries the photosensitivity warning above the permission text. */
+    @Test fun explainer_showsThePhotosensitivityWarning() {
+        showAudioOverlay(AudioState.ShowingExplainer, "Continue")
+        compose.onNodeWithText(
+            "Warning: the visualizations include intense moving and flashing lights. They are not recommended " +
+                "for people with epilepsy, who suffer migraines, experience nausea, or who are otherwise sensitive " +
+                "to bright visual stimulation.",
+        ).assertIsDisplayed()
+        compose.onNodeWithText("Continue").assertIsDisplayed()
+    }
+
     @Test fun errorOverlay_tapAndDoubleTap_doNotReachVisualizer() {
         showAudioOverlay(AudioState.Failed(FailReason.CaptureStartFailed), "Audio capture couldn't start.")
         assertNoLeak(Offset(20f, 20f), menuOpen = false)
