@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Dependency verification for the one artifact that is not hash-addressable by its repository: Aptabase's Kotlin SDK
+  comes from JitPack, which builds from a git tag, so the AAR, POM and module file are pinned here by SHA-256 (the
+  same policy as the hash-pinned bundled content in app/bundled-*.txt). Every other group is trusted as-is; Maven
+  Central and Google's repository serve immutable, checksummed artifacts. To bump the SDK: change the version in
+  gradle/libs.versions.toml, build once, and replace the three checksums with the new files' sha256sum.
+-->
+<verification-metadata xmlns="https://schema.gradle.org/dependency-verification"
+                       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                       xsi:schemaLocation="https://schema.gradle.org/dependency-verification https://schema.gradle.org/dependency-verification/dependency-verification-1.3.xsd">
+   <configuration>
+      <verify-metadata>true</verify-metadata>
+      <verify-signatures>false</verify-signatures>
+      <trusted-artifacts>
+         <trust group="^(?!com\.github\.aptabase$).*" regex="true"/>
+      </trusted-artifacts>
+   </configuration>
+   <components>
+      <component group="com.github.aptabase" name="aptabase-kotlin" version="0.0.8">
+         <artifact name="aptabase-kotlin-0.0.8.aar">
+            <sha256 value="ab05054ebcb88c99fa24249765867983358c9321aa2a1752b627ad1db89cb183" origin="sha256sum of the JitPack artifact, 2026-10-14"/>
+         </artifact>
+         <artifact name="aptabase-kotlin-0.0.8.module">
+            <sha256 value="0ec0229573adcbaf670c9fcc1a7bb6e53d4495771d968dc01a5f406b31c20d4c" origin="sha256sum of the JitPack artifact, 2026-10-14"/>
+         </artifact>
+         <artifact name="aptabase-kotlin-0.0.8.pom">
+            <sha256 value="8a44c6b562a4e820cd212dd2383a62faf3728b10e7d6ca119f270d960d8614a2" origin="sha256sum of the JitPack artifact, 2026-10-14"/>
+         </artifact>
+      </component>
+   </components>
+</verification-metadata>

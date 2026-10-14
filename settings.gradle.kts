@@ -10,6 +10,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Aptabase's Kotlin SDK is published only through JitPack; nothing else may resolve from there, and the
+        // artifact is checksum-pinned in gradle/verification-metadata.xml (JitPack builds from a tag).
+        maven("https://jitpack.io") { content { includeGroup("com.github.aptabase") } }
     }
 }
 rootProject.name = "koggles"
