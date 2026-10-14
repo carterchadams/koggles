@@ -93,7 +93,11 @@ void Renderer::drawFrame() {
         const int eyeH = height_;
         setProjectMSize(eyeW, eyeH);
         eye_.begin(eyeW, eyeH);
-        projectm_opengl_render_frame(pm_);
+        if (calibration_.load()) {
+            bullseye_.draw(0, 0, eyeW, eyeH);  // the spacing calibration target in place of the frame
+        } else {
+            projectm_opengl_render_frame(pm_);
+        }
         const GLuint eyeTexture = eye_.end();
         // Read the copy's error now: Cardboard's draw calls glGetError internally and would
         // clear it, which is how a failing eye copy once went unnoticed (black goggles mode).

@@ -34,6 +34,9 @@ internal fun LazyListScope.displaySection(v: SettingsValues, actions: MenuAction
                 "Lens spacing", v.effectiveLensOffsetMm(), LENS_OFFSET_RANGE, 0.5f, { "%+.1f mm".format(it) },
             ) { x -> actions.updateSettings { it.withLensOffsetForCurrentMode(x) } }
             SwitchRow("Distortion correction", v.distortion) { on -> actions.updateSettings { it.copy(distortion = on) } }
+            // Calibration (the author, 2026-10-13): two bullseyes in the headset, moved together or apart with the
+            // volume keys; Back or a double tap ends it.
+            OutlinedButton(onClick = actions.onCalibrateSpacing) { Text("Configure spacing with volume buttons") }
         }
     }
 }

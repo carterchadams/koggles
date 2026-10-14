@@ -196,6 +196,7 @@ object AppGraph {
                 )
                 renderCommands.setGoggles(v.goggles)
                 renderCommands.setLens(LensState(v.effectiveLensOffsetMm(), v.distortion, v.wideView))
+                if (!v.goggles) renderCommands.setCalibration(false)  // calibration lives in goggles mode only
             }
         }
         folderPicker = dev.koggles.presets.FolderPicker(
@@ -206,6 +207,7 @@ object AppGraph {
             onFailed = { libraryRepo.reportError(it) },
         )
         menu = MenuState(setPreview = renderCommands::setMenuPreview, dispatch = audio::dispatch)
+        appScope.launch { menu.open.collect { open -> if (open) renderCommands.setCalibration(false) } }
         wideSpacingDefaults = WideSpacingDefaults(
             settings = settings,
             inputs = {

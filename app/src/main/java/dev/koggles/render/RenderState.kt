@@ -19,6 +19,8 @@ data class RenderState(
     val goggles: Boolean = false,
     val menuPreview: Boolean = false,
     val lens: LensState = LensState(),
+    /** Spacing calibration (bullseyes in place of the visualizer); never persisted, goggles mode only. */
+    val calibration: Boolean = false,
     val transition: TransitionState = TransitionState(),
     val texturePaths: List<String> = emptyList(),
 ) {

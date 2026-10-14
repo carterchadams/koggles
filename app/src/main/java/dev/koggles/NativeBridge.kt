@@ -58,6 +58,8 @@ object NativeBridge {
     )
     external fun rendererSetGoggles(h: Long, on: Boolean)
     external fun rendererSetLens(h: Long, offsetMm: Float, distortion: Boolean, xdpi: Float, wideView: Int)
+    /** Spacing calibration: goggles mode shows a bullseye per eye instead of the visualizer while on. */
+    external fun rendererSetCalibration(h: Long, on: Boolean)
 
     /** Diagnostic, any thread: whether the renderer is in goggles mode. */
     external fun rendererGogglesActive(h: Long): Boolean

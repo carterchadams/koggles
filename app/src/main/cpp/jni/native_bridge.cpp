@@ -149,6 +149,11 @@ Java_dev_koggles_NativeBridge_rendererSetLens(JNIEnv*, jobject, jlong h, jfloat 
     if (h != 0) asRenderer(h)->setLens(offsetMm, distortion == JNI_TRUE, xdpi, static_cast<int>(wideView));
 }
 
+JNIEXPORT void JNICALL
+Java_dev_koggles_NativeBridge_rendererSetCalibration(JNIEnv*, jobject, jlong h, jboolean on) {
+    if (h != 0) asRenderer(h)->setCalibration(on == JNI_TRUE);
+}
+
 JNIEXPORT jboolean JNICALL
 Java_dev_koggles_NativeBridge_rendererGogglesActive(JNIEnv*, jobject, jlong h) {
     return h != 0 && asRenderer(h)->gogglesActive() ? JNI_TRUE : JNI_FALSE;

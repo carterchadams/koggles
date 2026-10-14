@@ -14,6 +14,7 @@ class RenderCommandsTest {
         override fun setTransition(h: Long, t: TransitionState) { calls += "transition($h,${t.blendSec})" }
         override fun setGoggles(h: Long, on: Boolean) { calls += "goggles($h,$on)" }
         override fun setLens(h: Long, lens: LensState) { calls += "lens($h,${lens.offsetMm},${lens.wideView})" }
+        override fun setCalibration(h: Long, on: Boolean) { calls += "calibration($h,$on)" }
         override fun load(h: Long, data: String, requestId: Long, smooth: Boolean) { calls += "load($h,$data,$requestId,$smooth)" }
         override fun loadIdle(h: Long, requestId: Long) { calls += "idle($h,$requestId)" }
     }
@@ -41,7 +42,7 @@ class RenderCommandsTest {
         commands.loadPreset("x", 7, true, listOf("/t"))
         commands.attach(1)
         assertEquals(
-            listOf("texturePaths(1,/t)", "transition(1,5.0)", "goggles(1,true)", "lens(1,2.0,0)", "load(1,x,7,false)"),
+            listOf("texturePaths(1,/t)", "transition(1,5.0)", "goggles(1,true)", "lens(1,2.0,0)", "calibration(1,false)", "load(1,x,7,false)"),
             port.calls,
         )
     }
@@ -182,5 +183,19 @@ class RenderCommandsTest {
         commands.drain()
         assertEquals(listOf("lens(1,15.5,2)"), port.calls)
         assertEquals(2, commands.state.value.lens.wideView)
+    }
+
+    /** Spacing calibration (the author, 2026-10-13): the bullseyes replace the visualizer on the GL thread. */
+    @Test
+    fun setCalibration_reachesTheRenderer_andIsReplayedOnAttach() {
+        commands.attach(1)
+        port.calls.clear()
+        commands.setCalibration(true)
+        assertEquals(true, commands.state.value.calibration)
+        commands.drain()
+        assertEquals(listOf("calibration(1,true)"), port.calls)
+        port.calls.clear()
+        commands.attach(2)
+        assertEquals(listOf("texturePaths(2,)", "transition(2,3.0)", "goggles(2,false)", "lens(2,0.0,0)", "calibration(2,true)"), port.calls)
     }
 }

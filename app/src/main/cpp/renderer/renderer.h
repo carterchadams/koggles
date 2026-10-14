@@ -9,6 +9,7 @@
 
 #include <projectM-4/projectM.h>
 
+#include "bullseye.h"
 #include "eye_capture.h"
 #include "frame_stats.h"
 #include "goggles.h"
@@ -36,6 +37,8 @@ public:
     void setTransition(bool softCut, double blendSec, int presetDurationSec, bool hardCuts, bool locked);
     void setGoggles(bool on);
     void setLens(float offsetMm, bool distortion, float xdpi, int wideView);
+    // Spacing calibration: the eye frame is a bullseye instead of the visualizer (goggles mode only).
+    void setCalibration(bool on) { calibration_.store(on); }
     bool gogglesActive() const { return goggles_.load(); }
     std::array<double, 3> takeFrameStats() { return frameStats_.takeSnapshot(); }
 
@@ -49,6 +52,7 @@ private:
     static void onSwitchFailed(const char* filename, const char* message, void* self);
     static void onSwitchRequested(bool isHardCut, void* self);
     std::atomic<bool> goggles_{false};
+    std::atomic<bool> calibration_{false};
     float lensOffsetMm_ = 0.f;
     bool lensDistortion_ = true;
     int wideView_ = 0;  // 0 normal, 1 wide field of view, 2 wide + a window per eye
@@ -62,6 +66,7 @@ private:
     std::chrono::steady_clock::time_point lastFrameStart_{};
     bool haveLastFrame_ = false;
     Goggles goggles2d_;
+    Bullseye bullseye_;
     std::vector<float> pcm_;  // 2 * projectm_pcm_get_max_samples() interleaved floats
     int lastGlError_ = 0;
     std::atomic<int> eyeCopyErrors_{0};
