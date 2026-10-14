@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import dev.koggles.audio.AudioEvent
 import dev.koggles.audio.AudioState
 import dev.koggles.audio.Source
@@ -32,6 +33,21 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class TelemetryGateTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    companion object {
+        /** No system permission dialog over the activity (it hides the Compose hierarchy from the test). */
+        @org.junit.BeforeClass @JvmStatic fun grantAudio() {
+            val inst = InstrumentationRegistry.getInstrumentation()
+            inst.uiAutomation.executeShellCommand(
+                "pm grant ${inst.targetContext.packageName} android.permission.RECORD_AUDIO",
+            ).close()
+            // No first-run folder prompt (it opens the menu by itself): these tests open the menu themselves.
+            runBlocking { AppGraph.settings.update { it.copy(folderPrompted = true, explainerSeen = true) } }
+        }
+    }
+
+    /** The row's label is plain text; the Switch beside it is what toggles (MenuWidgets.SwitchRow tags it). */
+    private fun switchFor(label: String) = compose.onNodeWithTag("switch:$label")
 
     private class Recording : Telemetry {
         val events = mutableListOf<Event>()
@@ -59,6 +75,15 @@ class TelemetryGateTest {
         AppGraph.overrideTelemetryForTest(null)
     }
 
+    /** A calibration that lasts long enough for the activity's collector to see it start (a StateFlow conflates). */
+    private fun calibrate() {
+        AppGraph.renderCommands.setCalibration(true)
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.calibration }
+        compose.waitForIdle()
+        AppGraph.renderCommands.setCalibration(false)
+        compose.waitForIdle()
+    }
+
     private fun openMenu() {
         compose.onNodeWithTag("visualizer-gestures").performTouchInput { doubleClick() }
         compose.waitUntil(3_000) { AppGraph.menu.open.value }
@@ -68,10 +93,9 @@ class TelemetryGateTest {
     @Test fun off_nothingReachesTheVendor() {
         compose.runOnUiThread { AppGraph.setAnalytics(false) }
         openMenu()
-        compose.onNodeWithText("Goggles mode").performClick()
+        switchFor("Goggles mode").performClick()
         compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.goggles }
-        AppGraph.renderCommands.setCalibration(true)
-        AppGraph.renderCommands.setCalibration(false)
+        calibrate()
         compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         compose.waitForIdle()
@@ -81,7 +105,7 @@ class TelemetryGateTest {
     @Test fun on_menuTogglesAreReported() {
         compose.runOnUiThread { AppGraph.setAnalytics(true) }
         openMenu()
-        compose.onNodeWithText("Goggles mode").performClick()
+        switchFor("Goggles mode").performClick()
         compose.waitUntil(3_000) { vendor.names().contains("goggles_toggled") }
         assertEquals(mapOf("on" to 1), vendor.last().props)
         compose.onNodeWithTag("menu-list").performScrollToNode(hasText("Wide"))
@@ -92,8 +116,7 @@ class TelemetryGateTest {
 
     @Test fun on_calibrationEndIsReported() {
         compose.runOnUiThread { AppGraph.setAnalytics(true) }
-        AppGraph.renderCommands.setCalibration(true)
-        AppGraph.renderCommands.setCalibration(false)
+        calibrate()
         compose.waitUntil(3_000) { vendor.names().contains("calibration_finished") }
     }
 

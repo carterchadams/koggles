@@ -48,6 +48,7 @@ import dev.koggles.ui.menu.MenuActions
 import dev.koggles.ui.visualizerGestures
 import kotlinx.coroutines.flow.first
 import dev.koggles.ui.Explainer
+import dev.koggles.telemetry.Event
 import dev.koggles.ui.KogglesTheme
 import dev.koggles.ui.LaunchSplash
 import dev.koggles.ui.UnsupportedScreen
@@ -154,7 +155,10 @@ class MainActivity : ComponentActivity() {
         }
         onBackPressedDispatcher.addCallback(this, endCalibration)
         lifecycleScope.launch {
-            AppGraph.renderCommands.state.map { it.calibration }.distinctUntilChanged().collect { endCalibration.isEnabled = it }
+            AppGraph.renderCommands.state.map { it.calibration }.distinctUntilChanged().collect { calibrating ->
+                if (endCalibration.isEnabled && !calibrating) AppGraph.telemetry.track(Event.CalibrationFinished)
+                endCalibration.isEnabled = calibrating
+            }
         }
         lifecycleScope.launch {
             // One writer of requestedOrientation: the mode and the menu together (menu open = portrait).
@@ -195,6 +199,8 @@ class MainActivity : ComponentActivity() {
                 },
                 onRescan = { AppGraph.libraryRepo.refresh() },
                 onScanQr = ::scanViewerQr,
+                track = { AppGraph.telemetry.track(it) },
+                onAnalytics = AppGraph::setAnalytics,
                 onCalibrateSpacing = {
                     AppGraph.renderCommands.setCalibration(true)
                     AppGraph.menu.close()
@@ -241,6 +247,9 @@ class MainActivity : ComponentActivity() {
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         audio.dispatch(AudioEvent.ActivityStarted(granted))
+        sessionStartedAt = android.os.SystemClock.elapsedRealtime()
+        val render = AppGraph.renderCommands.state.value
+        AppGraph.telemetry.track(Event.AppStarted(audio.snapshot.value.source, render.goggles, render.lens.wideView))
         // The folder may have been deleted or revoked while we were away; playback must fall back to bundled.
         AppGraph.appScope.launch { AppGraph.libraryRepo.revalidate() }
     }
@@ -268,8 +277,13 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
+    /** Set in onStart; the session length reported in onStop is rounded to whole minutes. */
+    private var sessionStartedAt = 0L
+
     override fun onStop() {
         audio.dispatch(AudioEvent.ActivityStopped)
+        val seconds = (android.os.SystemClock.elapsedRealtime() - sessionStartedAt) / 1000
+        AppGraph.telemetry.track(Event.SessionEnded(minutes = ((seconds + 30) / 60).toInt()))
         super.onStop()
     }
 
@@ -280,6 +294,7 @@ class MainActivity : ComponentActivity() {
             // Back from the QR scanner: a newly saved profile resets the spacing offset.
             if (ViewerQr.changedCount() != qrCountBeforeScan) {
                 lifecycleScope.launch { AppGraph.settings.update { it.copy(lensOffsetMm = 0f) } }
+                AppGraph.telemetry.track(Event.ViewerQrScanned)
             }
             qrCountBeforeScan = -1
         }

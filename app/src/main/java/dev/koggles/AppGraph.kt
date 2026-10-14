@@ -24,6 +24,10 @@ import dev.koggles.playback.PlaybackControls
 import dev.koggles.audio.AudioState
 import dev.koggles.ui.MenuState
 import dev.koggles.ui.SilenceDetector
+import dev.koggles.telemetry.AptabaseTelemetry
+import dev.koggles.telemetry.ConsentGate
+import dev.koggles.telemetry.NoopTelemetry
+import dev.koggles.telemetry.Telemetry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -87,6 +91,30 @@ object AppGraph {
     lateinit var wideSpacingDefaults: WideSpacingDefaults
         private set
 
+    /**
+     * Anonymous usage statistics (README: Privacy). [telemetry] is the consent gate; everything that reports an event
+     * goes through it. Off by default; [setAnalytics] is the one way to flip it (the gate first, synchronously, then
+     * the persisted setting, so an event right after "off" is already dropped). Unavailable, and the switch hidden,
+     * when the build has no app key.
+     */
+    lateinit var telemetry: ConsentGate
+        private set
+
+    val analyticsAvailable: Boolean get() = BuildConfig.APTABASE_KEY.isNotEmpty()
+
+    /** Main thread. */
+    fun setAnalytics(on: Boolean) {
+        telemetry.setEnabled(on)
+        appScope.launch { settings.update { it.copy(analytics = on) } }
+    }
+
+    @Volatile private var telemetryOverride: Telemetry? = null
+
+    /** Instrumented tests only: the vendor behind the gate (null restores the real one for later gate builds). */
+    fun overrideTelemetryForTest(vendor: Telemetry?) {
+        telemetryOverride = vendor
+    }
+
     @Volatile private var playbackOverride: PlaybackControls? = null
 
     /** What the UI drives: [playback], unless a test has overridden it. */
@@ -147,6 +175,12 @@ object AppGraph {
         // One small blocking read at process start so the audio machine begins with the persisted
         // source and explainer flag; DataStore reads on its own IO scope, so this cannot deadlock main.
         val persisted = runBlocking { settings.values.first() }
+        telemetry = ConsentGate(persisted.analytics && analyticsAvailable) {
+            // Built on the first consented event. The SDK is initialised then and only then, and only if no test
+            // has put a fake behind the gate; the fake is looked up per event so a test can swap it.
+            val real by lazy { if (analyticsAvailable) AptabaseTelemetry(app, BuildConfig.APTABASE_KEY) else NoopTelemetry }
+            Telemetry { event -> (telemetryOverride ?: real).track(event) }
+        }
         renderCommands = RenderCommands(NativeRendererPort(app.resources.displayMetrics.xdpi))
         audio = AudioSession(
             factory = { source, consent, generation ->

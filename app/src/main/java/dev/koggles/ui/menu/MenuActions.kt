@@ -5,6 +5,7 @@ import dev.koggles.playback.PlaybackControls
 import dev.koggles.presets.PresetLibrary
 import dev.koggles.settings.Settings
 import dev.koggles.settings.SettingsValues
+import dev.koggles.telemetry.Event
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -20,6 +21,10 @@ class MenuActions(
     val onScanQr: () -> Unit,
     /** Spacing calibration: closes the menu and shows the bullseyes (the volume keys then step the spacing). */
     val onCalibrateSpacing: () -> Unit,
+    /** Anonymous usage statistics: reports an event (dropped unless the user turned the switch on). */
+    val track: (Event) -> Unit,
+    /** Flips the analytics switch: the gate first, then the setting (AppGraph.setAnalytics). */
+    val onAnalytics: (Boolean) -> Unit,
 ) {
     fun updateSettings(f: (SettingsValues) -> SettingsValues) {
         scope.launch { settings.update(f) }
