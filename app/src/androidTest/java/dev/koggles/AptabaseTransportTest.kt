@@ -46,7 +46,7 @@ class AptabaseTransportTest {
 
     private fun telemetry() = AptabaseTelemetry(
         InstrumentationRegistry.getInstrumentation().targetContext,
-        key = "A-SH-koggles-test",
+        key = "A-SH-test", // the SDK requires exactly three dash-separated parts
         host = "http://127.0.0.1:${server.localPort}",
     )
 
