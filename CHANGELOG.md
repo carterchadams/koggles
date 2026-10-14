@@ -2,6 +2,24 @@
 
 Every release is a signed APK on the [Releases](https://github.com/carterchadams/koggles/releases) page; the notes there carry the same text plus each file's SHA-256. All 0.x releases are pre-releases and install over the previous one.
 
+## v0.5.0: calibration double tap, photosensitivity warning, documentation
+
+Released 2026-10-14. Installs over 0.4.0. No settings change meaning.
+
+**In the headset**
+- A double tap ends the spacing calibration from inside the mount (a Cardboard trigger is a tap). While the bullseyes are up, a single tap does nothing, because the screen is easily touched while the phone is pushed into the mount. Back and switching goggles off still end it.
+
+**First launch**
+- A photosensitivity warning about intense moving and flashing lights now opens the first-launch explainer, above the audio-permission text. The screen scrolls when the text does not fit, so Continue is always reachable in landscape or with large fonts.
+
+**Documentation**
+- README rewritten around install, use, goggles and lens spacing, audio and permissions, building and tests, with screenshots. Its testing status records the hands-on headset check of Wide, Wide + window and the calibration, and the frame rate measured on a Galaxy S25 FE (Android 16): 120 fps in normal and goggles mode, no dropped frames, present-to-present p95 8.69 ms.
+- CASE_STUDY.md on the design and the AI-assisted development process, and this CHANGELOG with the history of every release.
+- AGENTS.md is the one instructions file for coding agents.
+
+**Tooling**
+- The README image check matches the banner by its path and download link, not its alt text, so the alt text can change.
+
 ## v0.4.0: wide view and eye spacing calibration
 
 Released 2026-10-13. Installs over 0.3.0. Existing installs keep the normal view until they choose a wide one; new installs start in Wide + window.
