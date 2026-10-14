@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 
 /**
  * With the default settings the real app auto-advances every 30 s and plays `!` transition
- * interstitials for about 4 s.
+ * never a transition preset.
  *
  * Timing is taken when each load is *issued* to the renderer (RenderCommands state), which is what
  * the playback logic controls. The time until the renderer acknowledges a load includes preset
@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AutoAdvanceTest {
 
-    private data class Loaded(val atMs: Long, val requestId: Long, val interstitial: Boolean)
+    private data class Loaded(val atMs: Long, val requestId: Long, val transition: Boolean)
 
     private val loads = Collections.synchronizedList(mutableListOf<Loaded>()) // issued loads
     private val ackLatencyMs = Collections.synchronizedList(mutableListOf<Long>())
@@ -38,7 +38,7 @@ class AutoAdvanceTest {
     @Before fun recordLoads() {
         runBlocking {
             AppGraph.settings.update {
-                it.copy(presetDurationSec = 30, interstitials = true, interstitialSec = 4, locked = false, softCut = true)
+                it.copy(presetDurationSec = 30, locked = false, softCut = true)
             }
         }
         val real = NativeBridge.listener
@@ -65,7 +65,7 @@ class AutoAdvanceTest {
                 if (issuedAt.containsKey(id) || id != AppGraph.playback.nowPlayingRequestId()) return@collect
                 val t = SystemClock.elapsedRealtime()
                 issuedAt[id] = t
-                loads += Loaded(t, id, AppGraph.playback.nowPlaying.value.interstitial)
+                loads += Loaded(t, id, AppGraph.playback.nowPlaying.value.ref?.isTransition == true)
             }
         }
     }
@@ -75,30 +75,25 @@ class AutoAdvanceTest {
         NativeBridge.listener = displaced
     }
 
-    @Test fun defaultSettings_autoAdvanceEvery30s_interstitialAbout4s() {
+    /** Default settings: an advance about every 30 s, and never a transition preset (the author removed interstitials). */
+    @Test fun defaults_autoAdvanceEvery30s_andNeverATransition() {
         ActivityScenario.launch(MainActivity::class.java).use {
             val deadline = SystemClock.elapsedRealtime() + 100_000
             var advance: Long? = null
-            var interstitial: Long? = null
-            while (SystemClock.elapsedRealtime() < deadline && (advance == null || interstitial == null)) {
+            while (SystemClock.elapsedRealtime() < deadline && advance == null) {
                 Thread.sleep(250)
                 val seen = synchronized(loads) { loads.toList() }
                 for ((a, b) in seen.zipWithNext()) {
-                    // A normal preset that played out its duration, then whatever came next.
-                    if (!a.interstitial && b.requestId == a.requestId + 1 && advance == null && seen.first() != a) {
-                        advance = b.atMs - a.atMs
-                    }
-                    // Visible duration: from the interstitial's on-screen ack to its destination's issue.
-                    if (a.interstitial && !b.interstitial && b.requestId == a.requestId + 1) {
-                        interstitial = b.atMs - (ackedAt[a.requestId] ?: a.atMs)
-                    }
+                    // Skip the first load (it may have started under the previous settings); then a preset that
+                    // played out its duration and whatever came next.
+                    if (b.requestId == a.requestId + 1 && advance == null && seen.first() != a) advance = b.atMs - a.atMs
                 }
             }
             val adv = advance ?: fail("no auto-advance observed in 100 s: $loads") as Nothing
-            val inter = interstitial ?: fail("no interstitial observed in 100 s: $loads") as Nothing
-            android.util.Log.i("AutoAdvanceTest", "advanceMs=$adv interstitialMs=$inter ackLatencyMs=$ackLatencyMs")
+            val transitions = synchronized(loads) { loads.filter { it.transition } }
+            android.util.Log.i("AutoAdvanceTest", "advanceMs=$adv transitions=${transitions.size} ackLatencyMs=$ackLatencyMs")
+            assertTrue("transition preset loaded: $transitions", transitions.isEmpty())
             assertTrue("auto-advance ${adv} ms, expected 30 s ± 2 s", adv in 28_000..32_000)
-            assertTrue("interstitial ${inter} ms, expected 4 s ± 1 s", inter in 3_000..5_000)
         }
     }
 
@@ -109,7 +104,7 @@ class AutoAdvanceTest {
      * ±0.5 s; with the default sigma that happens ~2 % of the time.
      */
     @Test fun advanceInterval_isFixed_notRandomised() {
-        runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 15, interstitials = false) } }
+        runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 15) } }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
                 val deadline = SystemClock.elapsedRealtime() + 110_000
@@ -127,7 +122,7 @@ class AutoAdvanceTest {
                 for (ms in intervals.take(4)) assertTrue("advance $ms ms, expected 15 s ± 0.5 s ($intervals)", ms in 14_500..15_500)
             }
         } finally {
-            runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 30, interstitials = true) } }
+            runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 30) } }
         }
     }
 
@@ -138,7 +133,7 @@ class AutoAdvanceTest {
      * and every load it issued below that id was superseded, so playback froze for the process.
      */
     @Test fun autoAdvance_resumesAfterAForeignLoad() {
-        runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 15, interstitials = false) } }
+        runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 15) } }
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
                 val start = SystemClock.elapsedRealtime() + 20_000
@@ -155,7 +150,7 @@ class AutoAdvanceTest {
                 assertTrue("playback did not resume after a foreign load (id $foreign): $loads", resumed.isNotEmpty())
             }
         } finally {
-            runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 30, interstitials = true) } }
+            runBlocking { AppGraph.settings.update { it.copy(presetDurationSec = 30) } }
         }
     }
 }

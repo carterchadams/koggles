@@ -1,8 +1,7 @@
 # Koggles Starter Pack presets
 
 The Koggles Starter Pack bundles 299 presets from projectM's classic preset pack
-(https://github.com/projectM-visualizer/presets-projectm-classic) and 4 transition presets from
-projectM's Cream of the Crop pack (https://github.com/projectM-visualizer/presets-cream-of-the-crop).
+(https://github.com/projectM-visualizer/presets-projectm-classic).
 
 They are distributed under the projectM team's statement on MilkDrop presets (LICENSE.md in
 presets-cream-of-the-crop), quoted verbatim:

@@ -20,6 +20,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onChildren
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -154,6 +155,27 @@ class MenuTest {
         }
     }
 
+    /**
+     * The texts of the list's composed children, top to bottom by layout position (a lazy list's child
+     * order is composition order), skipping nodes without text (a switch shares its row's top edge).
+     */
+    private fun listTextsByPosition(): List<String> =
+        compose.onNodeWithTag("menu-list").onChildren().fetchSemanticsNodes()
+            .sortedBy { it.boundsInRoot.top }
+            .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text } }
+            .filter { it.isNotEmpty() }
+
+    /** The author (2026-10-13): Goggles mode is the top-most option; licences sit at the very bottom, below Audio. */
+    @Test fun menuOrder_gogglesModeFirst_licensesLast() {
+        openMenu()
+        val top = listTextsByPosition()
+        assertEquals("first section expected Display", "Display", top.getOrNull(0))
+        assertEquals("first option expected Goggles mode", "Goggles mode", top.getOrNull(1))
+        scrollTo(hasText("About & licenses"))
+        val bottom = listTextsByPosition()
+        assertEquals("last item expected About & licenses: $bottom", "About & licenses", bottom.lastOrNull())
+    }
+
     @Test fun closeButton_closesMenu() {
         openMenu()
         compose.onNodeWithContentDescription("Close settings").performClick()
@@ -170,7 +192,7 @@ class MenuTest {
 
     @Test fun titleBar_staysVisibleWhenScrolled() = assertTitleBarVisibleAfterScroll()
 
-    @Test fun titleBar_staysVisibleWhenScrolled_landscape() {
+    @Test fun titleBar_staysVisibleWhenScrolled_openedFromGogglesMode() {
         runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
         compose.waitUntil(5_000) {
             compose.activity.resources.configuration.orientation ==
@@ -186,6 +208,90 @@ class MenuTest {
             compose.activity.requestedOrientation ==
                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
+    }
+
+    // ---- orientation (the author, 2026-10-13: the menu is portrait whenever it is open) ----
+
+    private fun requested() = compose.activity.requestedOrientation
+    private fun orientation() = compose.activity.resources.configuration.orientation
+    private fun awaitRequested(expected: Int, what: String) {
+        val deadline = System.currentTimeMillis() + 3_000
+        while (System.currentTimeMillis() < deadline && requested() != expected) Thread.sleep(50)
+        assertEquals("$what: requestedOrientation", expected, requested())
+    }
+    private fun awaitOrientation(expected: Int, what: String) {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline && orientation() != expected) Thread.sleep(50)
+        assertEquals("$what: configuration.orientation", expected, orientation())
+        compose.waitForIdle()
+    }
+    private fun gogglesOn() {
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } }
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_LANDSCAPE, "goggles on")
+    }
+    private fun gogglesOff() {
+        runBlocking { AppGraph.settings.update { it.copy(goggles = false) } }
+        compose.waitUntil(5_000) { requested() == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+    }
+
+    @Test fun menuOpen_locksPortrait_normalMode() {
+        openMenu()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "open in normal mode")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_PORTRAIT, "open in normal mode")
+        compose.runOnUiThread { AppGraph.menu.close() }
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, "closed in normal mode")
+    }
+
+    @Test fun menuOpen_locksPortrait_gogglesMode_andRestoresLandscape() {
+        gogglesOn()
+        openMenu()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "open in goggles mode")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_PORTRAIT, "open in goggles mode")
+        assertTrue(AppGraph.renderCommands.state.value.menuPreview)
+        assertFalse(AppGraph.renderCommands.state.value.effectiveGoggles)
+        compose.runOnUiThread { AppGraph.menu.close() }
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, "closed in goggles mode")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_LANDSCAPE, "closed in goggles mode")
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        gogglesOff()
+    }
+
+    /** Round 1 B2: a pause/resume with the menu open (back from the QR scanner) must not rotate it back to landscape. */
+    @Test fun menuOpen_gogglesMode_survivesPauseResume() {
+        gogglesOn()
+        openMenu()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "open in goggles mode")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_PORTRAIT, "open in goggles mode")
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        compose.waitForIdle()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "after pause/resume")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_PORTRAIT, "after pause/resume")
+        assertTrue(AppGraph.renderCommands.state.value.menuPreview)
+        assertFalse(AppGraph.renderCommands.state.value.effectiveGoggles)
+        compose.runOnUiThread { AppGraph.menu.close() }
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        gogglesOff()
+    }
+
+    /** Round 1 B2: goggles switched on inside the open menu, then closed at once: the final state is landscape goggles. */
+    @Test fun menuOpen_toggleGoggles_thenClose_landsInLandscape() {
+        openMenu()
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, "open in normal mode")
+        runBlocking { AppGraph.settings.update { it.copy(goggles = true) } } // what the Goggles mode switch commits
+        compose.runOnUiThread { AppGraph.menu.close() }
+        awaitRequested(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, "closed after toggling goggles")
+        awaitOrientation(android.content.res.Configuration.ORIENTATION_LANDSCAPE, "closed after toggling goggles")
+        compose.waitUntil(3_000) { AppGraph.renderCommands.state.value.effectiveGoggles }
+        gogglesOff()
+    }
+
+    /** The author removed interstitials (2026-10-13): no such row anywhere in the list. */
+    @Test fun menu_hasNoInterstitialRow() {
+        openMenu()
+        val found = runCatching { scrollTo(hasText("Transition interstitials")) }.isSuccess
+        assertFalse("row present: Transition interstitials", found)
     }
 
     /** Double tap only opens the menu, never closes it, and the scrim passes nothing to the visualization. */
@@ -219,10 +325,12 @@ class MenuTest {
         fake.nowPlaying.value = NowPlaying(ref = ref)
         try {
             openMenu()
+            // Tap the rows where their label is: the row's centre can land on the row's own button (the folder's
+            // "Play this folder") when the label wraps, as it does on the Samsung (probed 2026-10-13).
             scrollTo(hasTestTag("pack:${ref.packId}"))
-            compose.onNodeWithTag("pack:${ref.packId}").performClick()
+            compose.onNodeWithTag("pack:${ref.packId}").performTouchInput { click(Offset(width * 0.1f, centerY)) }
             scrollTo(hasTestTag("folder:${ref.packId}/${ref.folder}"))
-            compose.onNodeWithTag("folder:${ref.packId}/${ref.folder}").performClick()
+            compose.onNodeWithTag("folder:${ref.packId}/${ref.folder}").performTouchInput { click(Offset(width * 0.1f, centerY)) }
             scrollTo(hasContentDescription("Skip ${ref.name}"))
             compose.onNodeWithContentDescription("Skip ${ref.name}").performClick()
             compose.waitUntil(3_000) { fake.skips.get() == 1 }
@@ -323,7 +431,7 @@ class MenuTest {
         openMenu()
         scrollTo(hasText("Blend", substring = true)) // the label reads "Blend: 3.0 s"
         // The Blend slider, by its range (1..10 s): the section's labels and sliders are flat siblings, so a sibling
-        // match would also catch the Interstitial slider (2..10 s); the Lens spacing slider is -10..10 mm.
+        // match would also catch another slider; the Lens spacing slider is -10..10 mm.
         val blendSlider = SemanticsMatcher("the Blend slider") {
             it.config.getOrNull(SemanticsProperties.ProgressBarRangeInfo)?.range == 1f..10f
         }

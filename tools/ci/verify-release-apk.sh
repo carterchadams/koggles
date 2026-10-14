@@ -46,27 +46,24 @@ for lib in libkoggles.so libprojectM-4.so libGfxPluginCardboard.so libc++_shared
   grep -qx "lib/arm64-v8a/$lib" <<<"$entries" || missing="$missing $lib"
 done
 if [ -z "$missing" ]; then ok 4 native-libs; else bad 4 native-libs "missing$missing"; fi
-# 5 content and licences: the bundled presets are exactly the hash-pinned allowlist (one flat folder,
-# same names, same SHA-256, so a same-name file with other bytes fails), and the licence files are present.
+# 5 content and licences: the bundled presets are exactly the hash-pinned allowlist (one flat folder, no
+# subfolder at all, same names, same SHA-256, so a same-name file with other bytes fails), and the licence
+# files are present.
 allowlist="${ALLOWLIST:-$here/../../app/bundled-presets.txt}"
-transitions="${TRANSITIONS_ALLOWLIST:-$here/../../app/bundled-transitions.txt}"
-content="$(python3 - "$apk" "$allowlist" "$transitions" <<'PY' 2>&1
+content="$(python3 - "$apk" "$allowlist" <<'PY' 2>&1
 import hashlib, sys, zipfile
-apk, allow, trans = sys.argv[1], sys.argv[2], sys.argv[3]
+apk, allow = sys.argv[1], sys.argv[2]
 pack = "assets/presets/Koggles Starter Pack/"
-sub = "! Transition/"  # the only subfolder allowed (transition presets)
 want = {}
-for listfile, prefix in ((allow, ""), (trans, sub)):
-    for line in open(listfile, encoding="utf-8"):
-        line = line.strip()
-        if line and not line.startswith("#"):
-            digest, path = line.split("  ", 1)
-            want[prefix + path.rsplit("/", 1)[-1]] = digest
+for line in open(allow, encoding="utf-8"):
+    line = line.strip()
+    if line and not line.startswith("#"):
+        digest, path = line.split("  ", 1)
+        want[path.rsplit("/", 1)[-1]] = digest
 with zipfile.ZipFile(apk) as z:
     names = [n for n in z.namelist() if n.startswith("assets/presets/") and not n.endswith("/")]
     def placed(n):
-        rel = n[len(pack):]
-        return n.startswith(pack) and ("/" not in rel or (rel.startswith(sub) and "/" not in rel[len(sub):]))
+        return n.startswith(pack) and "/" not in n[len(pack):]
     outside = sorted(n for n in names if not placed(n))
     have = {n[len(pack):]: hashlib.sha256(z.read(n)).hexdigest() for n in names if n not in outside}
 missing = sorted(set(want) - set(have))

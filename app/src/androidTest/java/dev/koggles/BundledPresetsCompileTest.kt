@@ -17,6 +17,10 @@ import org.junit.runner.RunWith
  * (-PkogglesShaderDiagnostics) a warp or composite fallback is a failure, because projectM swallows
  * those; on other builds only failed or timed-out loads are caught. The instrumentation argument
  * extraPresets (comma-separated asset paths) adds presets to the run, for mutation checks.
+ *
+ * At will, not part of the instrumented suite: loading every bundled preset takes minutes on the
+ * emulator's software GPU and the bundle only changes when its allowlist does, so both tests skip
+ * unless the instrumentation argument `sweep` is `1`. `tools/ci/preset-sweep.sh` passes it.
  */
 @RunWith(AndroidJUnit4::class)
 class BundledPresetsCompileTest {
@@ -39,15 +43,20 @@ class BundledPresetsCompileTest {
         FakeAudio.uninstall()
     }
 
-    /** Every .milk asset under [dir], recursively (the pack is flat plus `! Transition/`). */
+    /** Every .milk asset under [dir], recursively (the pack is flat; a nested file would still be loaded). */
     private fun presetsUnder(assets: android.content.res.AssetManager, dir: String): List<String> =
         assets.list(dir)!!.sorted().flatMap { name ->
             val path = "$dir/$name"
             if (assets.list(path)!!.isNotEmpty()) presetsUnder(assets, path) else listOf(path).filter { it.endsWith(".milk") }
         }
 
+    private fun sweepRequested(): Boolean = InstrumentationRegistry.getArguments().getString("sweep") == "1"
+
     /** Load-only coverage, any build: no failed or timed-out loads. Shader fallbacks are invisible here. */
-    @Test fun everyBundledPreset_loads() = sweep(requireOwnShaders = false)
+    @Test fun everyBundledPreset_loads() {
+        assumeTrue("at-will sweep: run tools/ci/preset-sweep.sh", sweepRequested())
+        sweep(requireOwnShaders = false)
+    }
 
     /**
      * The shader gate: every bundled preset's own warp and composite shaders compile. projectM
@@ -55,6 +64,7 @@ class BundledPresetsCompileTest {
      * (-PkogglesShaderDiagnostics); without it the test is skipped rather than passing vacuously.
      */
     @Test fun everyBundledPreset_loadsWithItsOwnShaders() {
+        assumeTrue("at-will sweep: run tools/ci/preset-sweep.sh --shaders", sweepRequested())
         assumeTrue("shader gate needs -PkogglesShaderDiagnostics", NativeBridge.diagnosticsEnabled())
         sweep(requireOwnShaders = true)
     }

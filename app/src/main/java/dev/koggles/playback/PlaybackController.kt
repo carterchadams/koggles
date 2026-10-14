@@ -10,7 +10,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,7 +37,7 @@ fun interface PresetReader {
     suspend fun read(ref: PresetRef): String
 }
 
-data class NowPlaying(val ref: PresetRef? = null, val notice: String? = null, val interstitial: Boolean = false)
+data class NowPlaying(val ref: PresetRef? = null, val notice: String? = null)
 
 /**
  * Drives [Playlist] from user actions, projectM events and timers, and turns its requests into
@@ -67,7 +66,6 @@ class PlaybackController(
     private var values = SettingsValues()
     private var lastIssued: PlayRequest? = null
     private var loadJob: Job? = null
-    private var timerJob: Job? = null
     private var hardCutPending = false
 
     /** The library state most recently applied to the playlist (null until the first update). */
@@ -82,7 +80,7 @@ class PlaybackController(
             }.collect { i ->
                 values = i.values
                 playlist.update(
-                    PlaylistInputs(i.state.catalog, i.disabled, i.favorites, i.skipped, i.values.scope, i.values.interstitials),
+                    PlaylistInputs(i.state.catalog, i.disabled, i.favorites, i.skipped, i.values.scope),
                 )
                 applied.value = i.state
             }
@@ -148,7 +146,7 @@ class PlaybackController(
     /**
      * projectM's timer or beat asks to advance. [requestId] is the request the renderer was showing:
      * events for a superseded request (a newer command is in flight or done) are dropped, as are
-     * events delivered after locking or during an interstitial (its own timer advances it). An id
+     * events delivered after locking. An id
      * *newer* than ours came from another loader (debug harness, test, preview), since our ids never
      * exceed our latest: advance as usual, taking playback back. Ignoring it froze playback for the
      * rest of the process once anything else had loaded a preset.
@@ -156,7 +154,6 @@ class PlaybackController(
     override fun onSwitchRequested(hardCut: Boolean, requestId: Long) {
         if (requestId < playlist.latestRequestId) return
         if (values.locked || values.presetDurationSec == 0) return
-        if (lastIssued?.kind == Kind.Interstitial) return
         hardCutPending = hardCut
         next()
     }
@@ -181,21 +178,16 @@ class PlaybackController(
         playlist.onLoaded(requestId)
         val issued = lastIssued ?: return
         if (issued.requestId != requestId) return
-        if (issued.kind == Kind.Interstitial) startInterstitialTimer(requestId)
         val ref = (issued.target as? Target.Preset)?.ref ?: return
-        if (issued.kind == Kind.Normal) {
-            scope.launch { settings.update { it.copy(lastPresetKey = ref.key) } }
-        }
+        scope.launch { settings.update { it.copy(lastPresetKey = ref.key) } }
     }
 
     private fun process(r: PlayRequest) {
         loadJob?.cancel()
-        timerJob?.cancel()
         lastIssued = r
         _nowPlaying.value = NowPlaying(
             ref = (r.target as? Target.Preset)?.ref,
             notice = r.notice,
-            interstitial = r.kind == Kind.Interstitial,
         )
         val smooth = values.softCut && !hardCutPending
         hardCutPending = false
@@ -286,19 +278,6 @@ class PlaybackController(
             }
         }
         return withTimeoutOrNull(LOAD_TIMEOUT_MS) { job.await() }
-    }
-
-    /**
-     * An interstitial's duration is its time on screen, so its timer starts when the renderer
-     * reports it loaded, not when the load was issued: reading, texture setup and shader
-     * compilation can take seconds on a slow phone and would otherwise eat the interstitial.
-     */
-    private fun startInterstitialTimer(id: Long) {
-        timerJob?.cancel()
-        timerJob = scope.launch {
-            delay(values.interstitialSec * 1000L)
-            if (id == playlist.latestRequestId) playlist.onInterstitialElapsed(id)?.let(::process)
-        }
     }
 
     companion object {

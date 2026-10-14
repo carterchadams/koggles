@@ -34,8 +34,6 @@ class SettingsTest {
         assertEquals(3.0, v.blendSec, 0.0)
         assertEquals(false, v.hardCutsOnBeat)
         assertEquals(false, v.locked)
-        assertEquals(true, v.interstitials)
-        assertEquals(4, v.interstitialSec)
         assertEquals(true, v.singleTapNext)
         assertEquals(false, v.goggles)
         assertEquals(0f, v.lensOffsetMm, 0f)
@@ -73,26 +71,24 @@ class SettingsTest {
 
     @Test fun clampsOnWrite() = runBlocking {
         val s = Settings(store())
-        s.update { it.copy(presetDurationSec = 45, blendSec = 0.2, lensOffsetMm = 11f, interstitialSec = 1) }
+        s.update { it.copy(presetDurationSec = 45, blendSec = 0.2, lensOffsetMm = 11f) }
         var v = s.values.first()
         assertEquals(30, v.presetDurationSec)
         assertEquals(1.0, v.blendSec, 0.0)
         assertEquals(10f, v.lensOffsetMm, 0f)
-        assertEquals(2, v.interstitialSec)
 
-        s.update { it.copy(presetDurationSec = 120, blendSec = 3.26, lensOffsetMm = -0.3f, interstitialSec = 11) }
+        s.update { it.copy(presetDurationSec = 120, blendSec = 3.26, lensOffsetMm = -0.3f) }
         v = s.values.first()
         assertEquals(120, v.presetDurationSec)
         assertEquals(3.5, v.blendSec, 0.0)
         assertEquals(-0.5f, v.lensOffsetMm, 0f)
-        assertEquals(10, v.interstitialSec)
     }
 
     @Test fun persistsEveryField() = runBlocking {
         val s = Settings(store())
         val want = SettingsValues(
             presetDurationSec = 0, softCut = false, blendSec = 9.5, hardCutsOnBeat = true, locked = true,
-            interstitials = false, interstitialSec = 7, singleTapNext = false, goggles = true,
+            singleTapNext = false, goggles = true,
             lensOffsetMm = -4.5f, distortion = false, source = Source.HighQuality, explainerSeen = true,
             scope = Scope.Folder("user:p", "a/b"), lastPresetKey = "user:p/a/b/x.milk",
         )

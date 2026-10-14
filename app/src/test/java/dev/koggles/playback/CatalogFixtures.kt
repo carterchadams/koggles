@@ -47,5 +47,4 @@ fun inputs(
     favorites: Set<String> = emptySet(),
     skipped: Set<String> = emptySet(),
     scope: Scope = Scope.AllEnabled,
-    interstitials: Boolean = false,
-) = PlaylistInputs(catalog, disabledPacks, favorites, skipped, scope, interstitials)
+) = PlaylistInputs(catalog, disabledPacks, favorites, skipped, scope)
