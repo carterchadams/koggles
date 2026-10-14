@@ -44,6 +44,8 @@ data class SettingsValues(
     val lastPresetKey: String? = null,
     /** The first-run "Choose folder" prompt has been shown; it is shown once per install. */
     val folderPrompted: Boolean = false,
+    /** Anonymous usage statistics (Aptabase). Opt-in: off until the user turns it on; see telemetry/ConsentGate. */
+    val analytics: Boolean = false,
 )
 
 val PRESET_DURATIONS = listOf(0, 15, 30, 60, 120)
@@ -111,6 +113,7 @@ class Settings(private val store: DataStore<Preferences>) {
             prefs[K.explainerSeen] = next.explainerSeen
             prefs[K.scope] = next.scope.encode()
             prefs[K.folderPrompted] = next.folderPrompted
+            prefs[K.analytics] = next.analytics
             val last = next.lastPresetKey
             if (last == null) prefs.remove(K.lastPresetKey) else prefs[K.lastPresetKey] = last
         }
@@ -140,6 +143,7 @@ class Settings(private val store: DataStore<Preferences>) {
             scope = decodeScope(p[K.scope]),
             lastPresetKey = p[K.lastPresetKey],
             folderPrompted = p[K.folderPrompted] ?: d.folderPrompted,
+            analytics = p[K.analytics] ?: d.analytics,
         ).clamped()
     }
 
@@ -166,5 +170,6 @@ class Settings(private val store: DataStore<Preferences>) {
         val scope = stringPreferencesKey("settings.scope")
         val lastPresetKey = stringPreferencesKey("settings.lastPresetKey")
         val folderPrompted = booleanPreferencesKey("settings.folderPrompted")
+        val analytics = booleanPreferencesKey("settings.analytics")
     }
 }
