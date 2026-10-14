@@ -2,6 +2,7 @@
 
 #include <cardboard.h>
 
+#include <limits>
 #include <mutex>
 #include <vector>
 
@@ -50,6 +51,38 @@ std::vector<uint8_t> currentDeviceParams() {
 }
 }  // namespace
 
+std::vector<uint8_t> lensParams(float offsetMm, int wideView) {
+    // Wide view asks the profile for 90 degrees on every side; the SDK clamps each side to the screen edge.
+    const std::vector<uint8_t> base = withInterLensOffset(currentDeviceParams(), offsetMm);
+    return wideView > 0 ? withFieldOfView(base, 90.f, 90.f, 90.f, 90.f) : base;
+}
+
+uint64_t viewerParamsDigest() {
+    const std::vector<uint8_t> params = currentDeviceParams();
+    if (params.empty()) return 0;
+    uint64_t h = 1469598103934665603ull;
+    for (uint8_t b : params) {
+        h ^= b;
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+
+float frameCentreScreenX(int displayW, int displayH, float offsetMm, int wideView) {
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    if (displayW <= 0 || displayH <= 0) return nan;
+    const std::vector<uint8_t> params = lensParams(offsetMm, wideView);
+    if (params.empty()) return nan;
+    CardboardLensDistortion* lens = CardboardLensDistortion_create(params.data(), static_cast<int>(params.size()), displayW, displayH);
+    if (lens == nullptr) return nan;
+    // The frame centre in the left eye's texture window: the whole frame in modes 0 and 1, its left kWideWindowWidth
+    // in mode 2 (Goggles::draw).
+    const CardboardUv centre{wideView == 2 ? 0.5f / kWideWindowWidth : 0.5f, 0.5f};
+    const CardboardUv screen = CardboardLensDistortion_undistortedUvForDistortedUv(lens, &centre, kLeft);
+    CardboardLensDistortion_destroy(lens);
+    return screen.u;
+}
+
 void Goggles::configure(int displayW, int displayH, float xdpi, float offsetMm, bool distortion, int wideView) {
     const int changed = CardboardQrCode_getDeviceParamsChangedCount();
     if (displayW != displayW_ || displayH != displayH_ || xdpi != xdpi_ || offsetMm != offsetMm_ ||
@@ -72,9 +105,7 @@ void Goggles::rebuildLens() {
         lens_ = nullptr;
     }
     if (!distortionOn_ || displayW_ <= 0 || displayH_ <= 0) return;
-    // Wide view asks the profile for 90 degrees on every side; the SDK clamps each side to the screen edge.
-    const std::vector<uint8_t> base = withInterLensOffset(currentDeviceParams(), offsetMm_);
-    const std::vector<uint8_t> params = wideView_ > 0 ? withFieldOfView(base, 90.f, 90.f, 90.f, 90.f) : base;
+    const std::vector<uint8_t> params = lensParams(offsetMm_, wideView_);
     if (params.empty()) return;
     lens_ = CardboardLensDistortion_create(params.data(), static_cast<int>(params.size()), displayW_, displayH_);
     if (lens_ == nullptr) return;

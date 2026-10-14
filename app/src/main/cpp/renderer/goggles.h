@@ -3,6 +3,9 @@
 #include <GLES3/gl3.h>
 #include <jni.h>
 
+#include <cstdint>
+#include <vector>
+
 #include "quad.h"
 
 struct CardboardLensDistortion;
@@ -21,6 +24,18 @@ void cardboardInitAndroid(JavaVM* vm, jobject context);
 
 // Creates and destroys a lens distortion from the Cardboard V1 viewer params.
 bool cardboardLensProbe(int width, int height);
+
+// The saved viewer profile (else Cardboard V1) with the spacing offset applied and, for a wide view, the field of
+// view opened to the screen edges: the exact params the renderer builds its lens from. Empty if unavailable.
+std::vector<uint8_t> lensParams(float offsetMm, int wideView);
+
+// FNV-1a digest of the saved viewer profile's bytes (0 if unavailable); changes when a QR scan saves a new one.
+uint64_t viewerParamsDigest();
+
+// Where the frame's centre lands on screen for the left eye under [lensParams(offsetMm, wideView)]: the full-screen
+// x in [0, 1] (the SDK's undistorted uv of the eye texture point the frame centre maps to). NaN if the lens cannot be
+// built. Any thread, no GL: the spacing defaults are solved on this (WideSpacingDefaults.kt).
+float frameCentreScreenX(int displayW, int displayH, float offsetMm, int wideView);
 
 // Side-by-side output: Cardboard lens distortion of one eye texture to both eyes, or plain
 // half-screen viewports when distortion is off. GL thread only.

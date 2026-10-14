@@ -36,6 +36,8 @@ data class SettingsValues(
     val lensOffsetWideWindowMm: Float = 0f,
     val wideSpacingManual: Boolean = false,
     val wideWindowSpacingManual: Boolean = false,
+    /** The inputs (display, normal spacing, viewer profile) the wide defaults were last computed for; null = never. */
+    val wideDefaultsFor: String? = null,
     val source: Source = Source.Standard,
     val explainerSeen: Boolean = false,
     val scope: Scope = Scope.AllEnabled,
@@ -103,6 +105,8 @@ class Settings(private val store: DataStore<Preferences>) {
             prefs[K.lensOffsetWideWindowMm] = next.lensOffsetWideWindowMm
             prefs[K.wideSpacingManual] = next.wideSpacingManual
             prefs[K.wideWindowSpacingManual] = next.wideWindowSpacingManual
+            val wideFor = next.wideDefaultsFor
+            if (wideFor == null) prefs.remove(K.wideDefaultsFor) else prefs[K.wideDefaultsFor] = wideFor
             prefs[K.source] = next.source.name
             prefs[K.explainerSeen] = next.explainerSeen
             prefs[K.scope] = next.scope.encode()
@@ -130,6 +134,7 @@ class Settings(private val store: DataStore<Preferences>) {
             lensOffsetWideWindowMm = p[K.lensOffsetWideWindowMm] ?: d.lensOffsetWideWindowMm,
             wideSpacingManual = p[K.wideSpacingManual] ?: d.wideSpacingManual,
             wideWindowSpacingManual = p[K.wideWindowSpacingManual] ?: d.wideWindowSpacingManual,
+            wideDefaultsFor = p[K.wideDefaultsFor],
             source = p[K.source]?.let { n -> Source.entries.firstOrNull { it.name == n } } ?: d.source,
             explainerSeen = p[K.explainerSeen] ?: d.explainerSeen,
             scope = decodeScope(p[K.scope]),
@@ -155,6 +160,7 @@ class Settings(private val store: DataStore<Preferences>) {
         val lensOffsetWideWindowMm = floatPreferencesKey("settings.lensOffsetWideWindowMm")
         val wideSpacingManual = booleanPreferencesKey("settings.wideSpacingManual")
         val wideWindowSpacingManual = booleanPreferencesKey("settings.wideWindowSpacingManual")
+        val wideDefaultsFor = stringPreferencesKey("settings.wideDefaultsFor")
         val source = stringPreferencesKey("settings.source")
         val explainerSeen = booleanPreferencesKey("settings.explainerSeen")
         val scope = stringPreferencesKey("settings.scope")

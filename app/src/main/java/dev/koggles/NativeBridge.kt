@@ -68,6 +68,15 @@ object NativeBridge {
     /** Cardboard's counter of saved viewer-profile changes (increments after a QR scan). */
     external fun viewerParamsChangedCount(): Int
 
+    /** A digest of the saved viewer profile's bytes (persistable, unlike the counter); 0 if unavailable. */
+    external fun viewerParamsDigest(): Long
+
+    /**
+     * Any thread, no GL. Where the frame centre lands on screen for the left eye (full-screen x in 0..1) under the
+     * lens the renderer would build for [offsetMm] and [wideView] on a [displayW] x [displayH] display; NaN if none.
+     */
+    external fun lensFrameCentreX(displayW: Int, displayH: Int, offsetMm: Float, wideView: Int): Float
+
     /** Receives renderer events on the main thread. */
     @Volatile
     var listener: NativeListener? = null

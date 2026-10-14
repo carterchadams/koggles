@@ -242,6 +242,8 @@ class MainActivity : ComponentActivity() {
             }
             qrCountBeforeScan = -1
         }
+        // A new viewer profile (or a new display) changes the wide views' default spacing.
+        AppGraph.wideSpacingDefaults.recheck()
         // Back from another activity (the QR scanner): the same rule, menu state included.
         requestedOrientation = orientationFor(AppGraph.renderCommands.state.value.goggles, AppGraph.menu.open.value)
     }

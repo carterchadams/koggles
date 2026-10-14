@@ -177,6 +177,16 @@ Java_dev_koggles_NativeBridge_viewerParamsChangedCount(JNIEnv*, jobject) {
     return CardboardQrCode_getDeviceParamsChangedCount();
 }
 
+JNIEXPORT jlong JNICALL
+Java_dev_koggles_NativeBridge_viewerParamsDigest(JNIEnv*, jobject) {
+    return static_cast<jlong>(koggles::viewerParamsDigest());
+}
+
+JNIEXPORT jfloat JNICALL
+Java_dev_koggles_NativeBridge_lensFrameCentreX(JNIEnv*, jobject, jint displayW, jint displayH, jfloat offsetMm, jint wideView) {
+    return koggles::frameCentreScreenX(displayW, displayH, offsetMm, wideView);
+}
+
 JNIEXPORT void JNICALL
 Java_dev_koggles_NativeBridge_rendererSetTextureSearchPaths(JNIEnv* env, jobject, jlong h,
                                                             jobjectArray paths) {
