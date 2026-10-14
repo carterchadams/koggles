@@ -84,7 +84,10 @@ class GogglesPixelTest {
             waitFor("goggles active") { NativeBridge.rendererGogglesActive(commands.attachedHandle) }
             commands.setCalibration(true)
             val pxPerMm = main.targetContext.resources.displayMetrics.xdpi / 25.4f
-            // Past the rotation and the first calibration frames: wait for a landscape capture with lit pixels.
+            // The launch splash (the logo fade) covers the first SPLASH_MS of a fresh launch: on the phone the
+            // capture caught it over the bullseyes. Then past the rotation and the first calibration frames: a
+            // landscape capture with lit pixels.
+            Thread.sleep(dev.koggles.ui.SPLASH_MS + 400L)
             waitFor("the bullseyes on screen") { shot().let { it.width > it.height && litCount(it) > 50 } }
             val (w, h) = run { val b = shot(); b.width to b.height }
             // Two consecutive captures that agree: the lens rebuild after a settings change is not instantaneous.
@@ -172,9 +175,11 @@ class GogglesPixelTest {
         }
         repeat(3) {
             val ix = cx.toInt(); val iy = cy.toInt()
+            if (lumaArgb(b.getPixel(ix, iy)) >= 40) dump(b, "$what failed")
             assertTrue("$what: ($ix,$iy) is lit (${lumaArgb(b.getPixel(ix, iy))}), expected the dark centre", lumaArgb(b.getPixel(ix, iy)) < 40)
             val l = firstLit(ix, iy, -1, 0); val r = firstLit(ix, iy, 1, 0)
             val u = firstLit(ix, iy, 0, -1); val d = firstLit(ix, iy, 0, 1)
+            if (l == null || r == null || u == null || d == null) dump(b, "$what failed")
             assertTrue("$what: no ring around ($ix,$iy)", l != null && r != null && u != null && d != null)
             cx = ix + (r!! - l!!) / 2.0
             cy = iy + (d!! - u!!) / 2.0
