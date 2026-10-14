@@ -15,7 +15,8 @@ such as Google Cardboard and its many look-alikes.
   stopping at the viewer's nominal field of view; *Wide + window* also gives each eye its own side
   of the frame, so the outer periphery shows more of its own side. Each view keeps its own lens
   spacing, with defaults computed for your phone and viewer, and *Configure spacing with volume
-  buttons* puts two bullseyes in the headset so you can tune it by eye.
+  buttons* puts two bullseyes in the headset so you can tune it by eye; double-tap the screen, or
+  press the mount's trigger twice, to finish.
 - **Gestures:** tap for the next preset; double-tap for the menu (playback, packs and browser,
   display, library, audio).
 - **First launch:** the one screen before the audio permission carries a photosensitivity warning:
