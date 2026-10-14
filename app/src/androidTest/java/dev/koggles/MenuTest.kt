@@ -325,10 +325,12 @@ class MenuTest {
         fake.nowPlaying.value = NowPlaying(ref = ref)
         try {
             openMenu()
+            // Tap the rows where their label is: the row's centre can land on the row's own button (the folder's
+            // "Play this folder") when the label wraps, as it does on the Samsung (probed 2026-10-13).
             scrollTo(hasTestTag("pack:${ref.packId}"))
-            compose.onNodeWithTag("pack:${ref.packId}").performClick()
+            compose.onNodeWithTag("pack:${ref.packId}").performTouchInput { click(Offset(width * 0.1f, centerY)) }
             scrollTo(hasTestTag("folder:${ref.packId}/${ref.folder}"))
-            compose.onNodeWithTag("folder:${ref.packId}/${ref.folder}").performClick()
+            compose.onNodeWithTag("folder:${ref.packId}/${ref.folder}").performTouchInput { click(Offset(width * 0.1f, centerY)) }
             scrollTo(hasContentDescription("Skip ${ref.name}"))
             compose.onNodeWithContentDescription("Skip ${ref.name}").performClick()
             compose.waitUntil(3_000) { fake.skips.get() == 1 }
