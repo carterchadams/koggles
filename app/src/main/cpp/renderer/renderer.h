@@ -35,7 +35,7 @@ public:
 
     void setTransition(bool softCut, double blendSec, int presetDurationSec, bool hardCuts, bool locked);
     void setGoggles(bool on);
-    void setLens(float offsetMm, bool distortion, float xdpi);
+    void setLens(float offsetMm, bool distortion, float xdpi, int wideView);
     bool gogglesActive() const { return goggles_.load(); }
     std::array<double, 3> takeFrameStats() { return frameStats_.takeSnapshot(); }
 
@@ -51,6 +51,7 @@ private:
     std::atomic<bool> goggles_{false};
     float lensOffsetMm_ = 0.f;
     bool lensDistortion_ = true;
+    int wideView_ = 0;  // 0 normal, 1 wide field of view, 2 wide + a window per eye
     float xdpi_ = 0.f;
     int width_ = 0;
     int height_ = 0;

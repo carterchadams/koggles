@@ -1,6 +1,7 @@
 package dev.koggles.render
 
-data class LensState(val offsetMm: Float = 0f, val distortion: Boolean = true)
+/** [wideView]: 0 normal, 1 the profile's field of view opened to the screen edges, 2 also a window per eye. */
+data class LensState(val offsetMm: Float = 0f, val distortion: Boolean = true, val wideView: Int = 0)
 
 data class TransitionState(
     val softCut: Boolean = true,

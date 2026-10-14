@@ -30,6 +30,8 @@ class GogglesPixelTest {
     companion object {
         private const val FRAMES = 180
         private const val MIN_LUMA = 24.0
+        /** An outer-edge pixel is black (0.0) when the mesh stops short of it; any content there reads well above this. */
+        private const val EDGE_MIN_LUMA = 8.0
 
         @BeforeClass @JvmStatic fun grantAudio() {
             val inst = InstrumentationRegistry.getInstrumentation()
@@ -45,13 +47,21 @@ class GogglesPixelTest {
     }
 
     @After fun tearDown() {
-        runBlocking { AppGraph.settings.update { it.copy(locked = false, goggles = false, distortion = true) } }
+        runBlocking { AppGraph.settings.update { it.copy(locked = false, goggles = false, distortion = true, wideView = 0) } }
         FakeAudio.uninstall()
     }
 
     @Test fun gogglesDistortionOn_eyesRenderPixels_noCopyErrors() = assertEyesRender(distortion = true)
 
     @Test fun gogglesDistortionOff_eyesRenderPixels_noCopyErrors() = assertEyesRender(distortion = false)
+
+    /** Wide view (the author, 2026-10-13): the distortion mesh reaches the screen's outer edges. */
+    @Test fun wideView_lightsTheOuterEdges() = assertOuterEdges(wideView = 1, lit = true)
+
+    @Test fun wideViewWithWindow_lightsTheOuterEdges() = assertOuterEdges(wideView = 2, lit = true)
+
+    /** The normal view keeps the profile's field of view: the outer 2 % of each side stays black. */
+    @Test fun normalView_leavesTheOuterEdgesDark() = assertOuterEdges(wideView = 0, lit = false)
 
     private fun waitFor(what: String, timeoutMs: Long = 20_000, ok: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
@@ -67,6 +77,54 @@ class GogglesPixelTest {
         val g = (rgba ushr 16) and 0xff
         val b = (rgba ushr 8) and 0xff
         return 0.299 * r + 0.587 * g + 0.114 * b
+    }
+
+    /** Max luma over [FRAMES] frames at 1 % and 99 % of the width, mid-height (the outer edges of the two eyes). */
+    private fun assertOuterEdges(wideView: Int, lit: Boolean) {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitFor("audio active") {
+                val s = AppGraph.audio.snapshot.value.state
+                if (s == AudioState.ShowingExplainer) main.runOnMainSync { AppGraph.audio.dispatch(AudioEvent.ExplainerAccepted) }
+                s == AudioState.Active
+            }
+            val data = AppGraph.app.assets.open("g1/ok.milk").bufferedReader().use { it.readText() }
+            val id = (commands.state.value.preset?.requestId ?: 0L) + 1_000L
+            commands.loadPreset(data, id, false, emptyList())
+            runBlocking { AppGraph.settings.update { it.copy(goggles = true, distortion = true, wideView = wideView) } }
+            waitFor("renderer attached") { commands.attachedHandle != 0L }
+            val h = commands.attachedHandle
+            waitFor("goggles active") { NativeBridge.rendererGogglesActive(h) }
+            Thread.sleep(500)
+            val maxLeft = AtomicInteger()
+            val maxRight = AtomicInteger()
+            val maxCentre = AtomicInteger()
+            val drawn = CountDownLatch(FRAMES)
+            scenario.onActivity { activity ->
+                val view = checkNotNull(activity.visualizerView)
+                view.onFrameDrawn = { _ ->
+                    if (drawn.count > 0) {
+                        val w = view.width
+                        val y = view.height / 2
+                        maxLeft.accumulateAndGet((luma(NativeBridge.glReadPixelRgba(w / 100, y)) * 1000).toInt(), ::maxOf)
+                        maxRight.accumulateAndGet((luma(NativeBridge.glReadPixelRgba(w - w / 100, y)) * 1000).toInt(), ::maxOf)
+                        maxCentre.accumulateAndGet((luma(NativeBridge.glReadPixelRgba(w / 4, y)) * 1000).toInt(), ::maxOf)
+                        drawn.countDown()
+                    }
+                }
+            }
+            assertTrue("frames drawn", drawn.await(60, SECONDS))
+            scenario.onActivity { it.visualizerView?.onFrameDrawn = null }
+            val summary = "wideView=$wideView maxLuma edgeL=${maxLeft.get() / 1000.0} edgeR=${maxRight.get() / 1000.0} centreL=${maxCentre.get() / 1000.0}"
+            android.util.Log.i("GogglesPixelTest", summary)
+            assertTrue("the eye itself is dark (control): $summary", maxCentre.get() / 1000.0 >= MIN_LUMA)
+            if (lit) {
+                assertTrue("left outer edge dark: $summary", maxLeft.get() / 1000.0 >= EDGE_MIN_LUMA)
+                assertTrue("right outer edge dark: $summary", maxRight.get() / 1000.0 >= EDGE_MIN_LUMA)
+            } else {
+                assertTrue("left outer edge lit in normal view: $summary", maxLeft.get() / 1000.0 < 2.0)
+                assertTrue("right outer edge lit in normal view: $summary", maxRight.get() / 1000.0 < 2.0)
+            }
+        }
     }
 
     private fun assertEyesRender(distortion: Boolean) {

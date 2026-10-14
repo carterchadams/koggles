@@ -50,10 +50,11 @@ std::vector<uint8_t> currentDeviceParams() {
 }
 }  // namespace
 
-void Goggles::configure(int displayW, int displayH, float xdpi, float offsetMm, bool distortion) {
+void Goggles::configure(int displayW, int displayH, float xdpi, float offsetMm, bool distortion, int wideView) {
     const int changed = CardboardQrCode_getDeviceParamsChangedCount();
     if (displayW != displayW_ || displayH != displayH_ || xdpi != xdpi_ || offsetMm != offsetMm_ ||
-        distortion != distortionOn_ || changed != paramsChangedCount_) {
+        distortion != distortionOn_ || wideView != wideView_ || changed != paramsChangedCount_) {
+        wideView_ = wideView;
         displayW_ = displayW;
         displayH_ = displayH;
         xdpi_ = xdpi;
@@ -71,7 +72,9 @@ void Goggles::rebuildLens() {
         lens_ = nullptr;
     }
     if (!distortionOn_ || displayW_ <= 0 || displayH_ <= 0) return;
-    const std::vector<uint8_t> params = withInterLensOffset(currentDeviceParams(), offsetMm_);
+    // Wide view asks the profile for 90 degrees on every side; the SDK clamps each side to the screen edge.
+    const std::vector<uint8_t> base = withInterLensOffset(currentDeviceParams(), offsetMm_);
+    const std::vector<uint8_t> params = wideView_ > 0 ? withFieldOfView(base, 90.f, 90.f, 90.f, 90.f) : base;
     if (params.empty()) return;
     lens_ = CardboardLensDistortion_create(params.data(), static_cast<int>(params.size()), displayW_, displayH_);
     if (lens_ == nullptr) return;
@@ -94,13 +97,18 @@ void Goggles::draw(GLuint eyeTexture) {
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
     if (distortionOn_ && lens_ != nullptr && distortion_ != nullptr) {
-        CardboardEyeTextureDescription eye{};
-        eye.texture = eyeTexture;
-        eye.left_u = 0.f;
-        eye.right_u = 1.f;
-        eye.top_v = 1.f;
-        eye.bottom_v = 0.f;
-        CardboardDistortionRenderer_renderEyeToDisplay(distortion_, 0, 0, 0, displayW_, displayH_, &eye, &eye);
+        // One frame for both eyes. Wide + window: each eye gets its own share of it (left eye the left-most
+        // kWideWindowWidth, right eye the right-most), so each outer periphery shows more of its own side.
+        const float crop = wideView_ == 2 ? 1.f - kWideWindowWidth : 0.f;
+        CardboardEyeTextureDescription left{}, right{};
+        left.texture = right.texture = eyeTexture;
+        left.left_u = 0.f;
+        left.right_u = 1.f - crop;
+        right.left_u = crop;
+        right.right_u = 1.f;
+        left.top_v = right.top_v = 1.f;
+        left.bottom_v = right.bottom_v = 0.f;
+        CardboardDistortionRenderer_renderEyeToDisplay(distortion_, 0, 0, 0, displayW_, displayH_, &left, &right);
         return;
     }
     const EyeViewports v = plainEyeViewports(displayW_, displayH_, xdpi_, offsetMm_);

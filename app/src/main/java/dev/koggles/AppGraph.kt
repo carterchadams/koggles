@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import dev.koggles.playback.Playlist
 import dev.koggles.render.LensState
+import dev.koggles.settings.effectiveLensOffsetMm
 import dev.koggles.render.TransitionState
 import dev.koggles.render.NativeRendererPort
 import dev.koggles.render.RenderCommands
@@ -190,7 +191,7 @@ object AppGraph {
                     TransitionState(v.softCut, v.blendSec, v.presetDurationSec, v.hardCutsOnBeat, v.locked),
                 )
                 renderCommands.setGoggles(v.goggles)
-                renderCommands.setLens(LensState(v.lensOffsetMm, v.distortion))
+                renderCommands.setLens(LensState(v.effectiveLensOffsetMm(), v.distortion, v.wideView))
             }
         }
         folderPicker = dev.koggles.presets.FolderPicker(

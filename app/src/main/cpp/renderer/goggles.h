@@ -9,6 +9,11 @@ struct CardboardLensDistortion;
 struct CardboardDistortionRenderer;
 
 namespace koggles {
+/** Wide + window: the share of the frame each eye sees (the left eye its left share, the right eye its right). */
+constexpr float kWideWindowWidth = 0.85f;
+}  // namespace koggles
+
+namespace koggles {
 
 // Calls Cardboard_initializeAndroid(vm, context) at most once per process. KogglesApp passes a
 // display context derived from the Application (the SDK retains it; see NativeBridge.kt).
@@ -27,7 +32,9 @@ public:
     Goggles& operator=(const Goggles&) = delete;
 
     // Rebuilds lens and meshes only when an argument or the viewer profile changes.
-    void configure(int displayW, int displayH, float xdpi, float offsetMm, bool distortion);
+    // wideView: 0 the viewer profile as is; 1 its field of view opened to the screen edges (the mesh then reaches
+    // them, same distortion); 2 also a different window of the frame per eye (kWideWindowWidth of it each).
+    void configure(int displayW, int displayH, float xdpi, float offsetMm, bool distortion, int wideView);
     void draw(GLuint eyeTexture);
     void release();
 
@@ -37,6 +44,7 @@ private:
     CardboardLensDistortion* lens_ = nullptr;
     CardboardDistortionRenderer* distortion_ = nullptr;
     Quad quad_;
+    int wideView_ = 0;
     int displayW_ = 0;
     int displayH_ = 0;
     float xdpi_ = 0.f;

@@ -13,7 +13,7 @@ class RenderCommandsTest {
         override fun setTexturePaths(h: Long, paths: List<String>) { calls += "texturePaths($h,${paths.joinToString()})" }
         override fun setTransition(h: Long, t: TransitionState) { calls += "transition($h,${t.blendSec})" }
         override fun setGoggles(h: Long, on: Boolean) { calls += "goggles($h,$on)" }
-        override fun setLens(h: Long, lens: LensState) { calls += "lens($h,${lens.offsetMm})" }
+        override fun setLens(h: Long, lens: LensState) { calls += "lens($h,${lens.offsetMm},${lens.wideView})" }
         override fun load(h: Long, data: String, requestId: Long, smooth: Boolean) { calls += "load($h,$data,$requestId,$smooth)" }
         override fun loadIdle(h: Long, requestId: Long) { calls += "idle($h,$requestId)" }
     }
@@ -41,7 +41,7 @@ class RenderCommandsTest {
         commands.loadPreset("x", 7, true, listOf("/t"))
         commands.attach(1)
         assertEquals(
-            listOf("texturePaths(1,/t)", "transition(1,5.0)", "goggles(1,true)", "lens(1,2.0)", "load(1,x,7,false)"),
+            listOf("texturePaths(1,/t)", "transition(1,5.0)", "goggles(1,true)", "lens(1,2.0,0)", "load(1,x,7,false)"),
             port.calls,
         )
     }
@@ -171,5 +171,16 @@ class RenderCommandsTest {
         assertEquals(3L, commands.lastAppliedRequestId)
         commands.drain()
         assertEquals(4L, commands.lastAppliedRequestId)
+    }
+
+    /** Wide view rides the lens state to the renderer (the mode decides the field of view and the per-eye window). */
+    @Test
+    fun setLens_carriesTheWideViewMode() {
+        commands.attach(1)
+        port.calls.clear()
+        commands.setLens(LensState(offsetMm = 15.5f, wideView = 2))
+        commands.drain()
+        assertEquals(listOf("lens(1,15.5,2)"), port.calls)
+        assertEquals(2, commands.state.value.lens.wideView)
     }
 }

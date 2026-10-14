@@ -22,7 +22,7 @@ class NativeRendererPort(private val xdpi: Float) : RendererPort {
         NativeBridge.rendererSetTransition(h, t.softCut, t.blendSec, t.presetDurationSec, t.hardCutsOnBeat, t.locked)
     override fun setGoggles(h: Long, on: Boolean) = NativeBridge.rendererSetGoggles(h, on)
     override fun setLens(h: Long, lens: LensState) =
-        NativeBridge.rendererSetLens(h, lens.offsetMm, lens.distortion, xdpi)
+        NativeBridge.rendererSetLens(h, lens.offsetMm, lens.distortion, xdpi, lens.wideView)
     override fun load(h: Long, data: String, requestId: Long, smooth: Boolean) =
         NativeBridge.rendererLoadPresetData(h, data, requestId, smooth)
     override fun loadIdle(h: Long, requestId: Long) = NativeBridge.rendererLoadIdle(h, requestId)

@@ -57,7 +57,7 @@ object NativeBridge {
         h: Long, softCut: Boolean, blendSec: Double, presetDurationSec: Int, hardCuts: Boolean, locked: Boolean,
     )
     external fun rendererSetGoggles(h: Long, on: Boolean)
-    external fun rendererSetLens(h: Long, offsetMm: Float, distortion: Boolean, xdpi: Float)
+    external fun rendererSetLens(h: Long, offsetMm: Float, distortion: Boolean, xdpi: Float, wideView: Int)
 
     /** Diagnostic, any thread: whether the renderer is in goggles mode. */
     external fun rendererGogglesActive(h: Long): Boolean
