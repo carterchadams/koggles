@@ -143,6 +143,15 @@ class MainActivity : ComponentActivity() {
                 audio.uiEffects.collect(::handleUiEffect)
             }
         }
+        // Spacing calibration: the system Back ends it (the back dispatcher, which is how Back arrives with
+        // predictive back on Android 16 and this target; KEYCODE_BACK below covers devices that still send it).
+        val endCalibration = object : androidx.activity.OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() { AppGraph.renderCommands.setCalibration(false) }
+        }
+        onBackPressedDispatcher.addCallback(this, endCalibration)
+        lifecycleScope.launch {
+            AppGraph.renderCommands.state.map { it.calibration }.distinctUntilChanged().collect { endCalibration.isEnabled = it }
+        }
         lifecycleScope.launch {
             // One writer of requestedOrientation: the mode and the menu together (menu open = portrait).
             combine(AppGraph.renderCommands.state.map { it.goggles }, AppGraph.menu.open, ::orientationFor)

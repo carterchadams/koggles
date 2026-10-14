@@ -13,6 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -24,6 +25,16 @@ import org.junit.runner.RunWith
 class CalibrationKeysTest {
     private val main = InstrumentationRegistry.getInstrumentation()
     private val commands get() = AppGraph.renderCommands
+
+    companion object {
+        /** The audio machine reaches Active only with the permission (as MenuTest and GogglesPixelTest grant it). */
+        @BeforeClass @JvmStatic fun grantAudio() {
+            val inst = InstrumentationRegistry.getInstrumentation()
+            inst.uiAutomation.executeShellCommand(
+                "pm grant ${inst.targetContext.packageName} android.permission.RECORD_AUDIO",
+            ).close()
+        }
+    }
 
     @Before fun setUp() {
         FakeAudio.install()
@@ -89,6 +100,39 @@ class CalibrationKeysTest {
             assertTrue("back consumed while calibrating", downBack && upBack)
             waitFor("calibration ended") { !commands.state.value.calibration }
             assertEquals(9.5f, spacing(), 0f)
+        }
+    }
+
+    /**
+     * The system Back arrives through the back dispatcher, not as KEYCODE_BACK, on Android 16 with this target
+     * (predictive back): it must end the calibration, not leave the app; and outside calibration (menu closed) no
+     * callback of ours is armed, so Back keeps its default.
+     */
+    @Test fun systemBack_endsTheCalibration_andIsOtherwiseUnarmed() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitFor("audio active") {
+                val s = AppGraph.audio.snapshot.value.state
+                if (s == AudioState.ShowingExplainer) main.runOnMainSync { AppGraph.audio.dispatch(AudioEvent.ExplainerAccepted) }
+                s == AudioState.Active
+            }
+            lateinit var activity: MainActivity
+            scenario.onActivity { activity = it }
+            main.runOnMainSync { AppGraph.menu.close() }
+            Thread.sleep(300)
+            var armed = true
+            main.runOnMainSync { armed = activity.onBackPressedDispatcher.hasEnabledCallbacks() }
+            assertFalse("a back callback armed outside calibration", armed)
+
+            commands.setCalibration(true)
+            waitFor("back callback armed") {
+                var a = false
+                main.runOnMainSync { a = activity.onBackPressedDispatcher.hasEnabledCallbacks() }
+                a
+            }
+            main.runOnMainSync { activity.onBackPressedDispatcher.onBackPressed() }
+            waitFor("calibration ended") { !commands.state.value.calibration }
+            Thread.sleep(300)
+            assertFalse("the activity finished on Back", activity.isFinishing)
         }
     }
 
