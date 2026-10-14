@@ -40,6 +40,11 @@ import dev.koggles.audio.AudioState
 import dev.koggles.playback.NowPlaying
 import dev.koggles.playback.PlaybackControls
 import dev.koggles.presets.PresetRef
+import dev.koggles.telemetry.Telemetry
+import dev.koggles.ui.menu.ANALYTICS_EXPLANATION
+import dev.koggles.ui.menu.ANALYTICS_SWITCH
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -168,6 +173,41 @@ class MenuTest {
             .sortedBy { it.boundsInRoot.top }
             .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text } }
             .filter { it.isNotEmpty() }
+
+    /**
+     * Privacy (2026-10-14): one switch for the anonymous usage statistics, off by default, with its explanation,
+     * at the bottom above "About & licenses". Flipping it closes the consent gate first and then persists.
+     */
+    @Test fun privacy_switchIsOffByDefault_flipsTheGateAndTheSetting() {
+        AppGraph.overrideTelemetryForTest(Telemetry {}) // a vendor behind the gate makes analytics available
+        try {
+            openMenu()
+            scrollTo(hasText("Privacy"))
+            compose.onNodeWithText(ANALYTICS_EXPLANATION).assertIsDisplayed()
+            val switch = compose.onNodeWithTag("switch:$ANALYTICS_SWITCH").assertIsDisplayed()
+            switch.assertIsOff()
+            switch.performClick()
+            compose.waitUntil(3_000) { AppGraph.telemetry.enabled.value }
+            compose.waitUntil(3_000) { runBlocking { AppGraph.settings.values.first().analytics } }
+            switch.assertIsOn()
+            switch.performClick()
+            compose.waitUntil(3_000) { !AppGraph.telemetry.enabled.value }
+            compose.waitUntil(3_000) { !runBlocking { AppGraph.settings.values.first().analytics } }
+            switch.assertIsOff()
+        } finally {
+            compose.runOnUiThread { AppGraph.setAnalytics(false) }
+            AppGraph.overrideTelemetryForTest(null)
+        }
+    }
+
+    /** A build without an app key (plain CI, forks) has no Privacy section at all. */
+    @Test fun privacy_isAbsentWhenAnalyticsIsUnavailable() {
+        assertFalse("test builds carry no key", AppGraph.analyticsAvailable)
+        openMenu()
+        scrollTo(hasText("About & licenses"))
+        compose.onNodeWithText("Privacy").assertDoesNotExist()
+        compose.onNodeWithTag("switch:$ANALYTICS_SWITCH").assertDoesNotExist()
+    }
 
     /** The author (2026-10-13): Goggles mode is the top-most option; licences sit at the very bottom, below Audio. */
     @Test fun menuOrder_gogglesModeFirst_licensesLast() {
