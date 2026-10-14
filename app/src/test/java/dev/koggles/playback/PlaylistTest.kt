@@ -437,6 +437,20 @@ class PlaylistTest {
 
     private val mixed = catalogOf(pack("bundled:a", "p0.milk", "p1.milk", "p2.milk", "p3.milk", "p4.milk", "!t/t0.milk", "!t/t1.milk"))
     private val transitions = setOf("bundled:a/!t/t0.milk", "bundled:a/!t/t1.milk")
+    /** The author removed interstitials (2026-10-13): a transition preset is never issued, whatever the catalog holds. */
+    @Test fun next_neverPlaysATransitionPreset() {
+        val p = playlist(mixed)
+        val seen = HashSet<String>()
+        repeat(50) {
+            val r = p.next()
+            p.onLoaded(r.requestId)
+            val k = keyOf(r)!!
+            assertFalse("transition preset issued by next(): $k", k in transitions)
+            seen += k
+        }
+        assertEquals("the cycle still visits every normal preset", setOf("bundled:a/p0.milk", "bundled:a/p1.milk", "bundled:a/p2.milk", "bundled:a/p3.milk", "bundled:a/p4.milk"), seen)
+    }
+
     /** Skip: excluded at once (before the persisted set arrives), from ▶ next and 🔀 alike; eligible again once un-skipped. */
     @Test fun skip_excludesAtOnce_untilUnskipped() {
         val p = playlist(mixed)
