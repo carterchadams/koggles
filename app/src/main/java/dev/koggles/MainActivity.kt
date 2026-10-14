@@ -107,14 +107,18 @@ class MainActivity : ComponentActivity() {
             val snapshot by audio.snapshot.collectAsStateWithLifecycle()
             val values by AppGraph.settings.values.collectAsStateWithLifecycle(SettingsValues())
             val menuOpen by AppGraph.menu.open.collectAsStateWithLifecycle()
+            val calibrating by AppGraph.renderCommands.state.map { it.calibration }
+                .collectAsStateWithLifecycle(AppGraph.renderCommands.state.value.calibration)
             Box(Modifier.fillMaxSize()) {
                 // The visualization stays attached; audio screens cover it completely.
                 AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
+                // Calibrating: a double tap ends it (a Cardboard trigger is a tap), a single tap does nothing
+                // (the screen is easily touched while the phone is being inserted into the mount).
                 Box(
                     Modifier.fillMaxSize().testTag("visualizer-gestures").visualizerGestures(
-                        singleTapEnabled = { values.singleTapNext },
-                        onSingleTap = { AppGraph.playbackControls.next() },
-                        onDoubleTap = { AppGraph.menu.toggle() },
+                        singleTapEnabled = { calibrating || values.singleTapNext },
+                        onSingleTap = { if (!calibrating) AppGraph.playbackControls.next() },
+                        onDoubleTap = { if (calibrating) AppGraph.renderCommands.setCalibration(false) else AppGraph.menu.toggle() },
                     ),
                 )
                 if (menuOpen) Menu()
@@ -243,8 +247,8 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Spacing calibration keys: while the bullseyes are up, volume up/down step the current view's spacing by
-     * 0.5 mm (consumed, so the volume does not change) and Back ends the calibration. Otherwise every key is the
-     * system's.
+     * 0.5 mm (consumed, so the volume does not change) and Back, or a double tap on the screen, ends the
+     * calibration. Otherwise every key is the system's.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (DebugHooks.onKeyEvent(this, event)) return true

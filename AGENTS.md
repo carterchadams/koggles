@@ -1,57 +1,54 @@
 # AGENTS.md
 
-Koggles is an Android music visualizer built on libprojectM. It has a normal full-screen mode
-and a lens-corrected side-by-side "goggles" mode for phone VR mounts, and it is driven by device
-audio. Package `dev.koggles`. Kotlin/Compose app under `app/src/main/java`, C++ renderer under
-`app/src/main/cpp` (the pure C++ in `core/` is host-tested from `native-tests/`), release tooling
-under `tools/ci`.
+Koggles: an Android music visualizer on libprojectM with a lens-corrected "goggles" mode for phone
+VR mounts. Package `dev.koggles`. Kotlin/Compose under `app/src/main/java`, C++ renderer under
+`app/src/main/cpp` (its pure `core/` is host-tested from `native-tests/`), unit tests under
+`app/src/test`, instrumented tests under `app/src/androidTest` (run with `tools/ci/instrumented.sh`,
+`ANDROID_SERIAL` set). Plans and records live outside the repo in the git-ignored `.tmp/records/`.
 
-## How work happens here
+## The process
 
-The author directs; agents execute. Planning documents, review transcripts and verification
-records are kept outside the repo (locally, under the git-ignored `.tmp/`), so the repo holds
-code, tests, and the rationale in code comments. README's "How this was built" is the public
-summary.
+Every fix or feature follows this. If a step is skipped, shortened or reordered for any reason,
+say so to the human at that moment and explain why; never deviate silently.
 
-For any change beyond a trivial fix:
+1. **Idea.** The human states the fix or feature.
+2. **Plan.** `/superpowers:writing-plans` into `.tmp/records/plans/<NAME>.md`. A plan is a
+   blueprint: the files to touch, the interfaces, the tests that will prove each task (unit or
+   integration, plus instrumented), what will be measured on the emulator and on the physical
+   phone, and the success criteria.
+3. **Review the plan.** `/codex:adversarial-review` on the plan. Update the plan in response, and
+   re-review until it is approved. Keep the review and the response in `.tmp/records/`.
+4. **The loop**, one task at a time:
+   - `/superpowers:test-driven-development` before any production code. Write the failing test,
+     watch it fail for the expected reason, then make it pass. Tests are both automated (unit /
+     integration) and instrumented on the emulator and on the physical device.
+   - `/superpowers:executing-plans` to implement the task.
+   - `/codex:adversarial-review` on the implementation. Fix findings test-first.
+   - Repeat until the review finds no problem.
+5. **Whole-work review.** `/codex:review` on the complete work. A holistic finding resumes the
+   loop at step 4.
+6. **README.** Update it if the user-facing behaviour or the feature list changed.
 
-1. **Plan first, in writing.** A short plan with the files to touch, the tests that will prove it,
-   and measurable success criteria. The author approves the plan before code.
-2. **Adversarial review of the plan**, by an independent reviewer (OpenAI Codex through its
-   Claude Code plugin). Revise until it approves. Record each round's findings and your response
-   in `.tmp/` so the author can read them.
-3. **Tests first.** For each task, write the failing test, watch it fail for the expected reason,
-   then make it pass. A test that passes before the change exists is not testing the change.
-   For guard tests that already pass, prove they can fail by temporarily breaking what they guard.
-4. **Measure on real targets.** Logic and timing on the emulator; anything touching the GPU
-   driver, audio stack or touch input also on the physical phone. Device checks are automated
-   over USB (`adb`, instrumented tests, logcat and pixel capture); install test builds beside the
-   author's app with `-PkogglesAppIdSuffix`, never over it. The author does quick hands-on checks
-   of real-world behaviour and reports them verbatim; record those words.
-5. **Adversarial review of the finished branch**, revised until approved, then merge into `dev`.
-   `main` moves only when the author says so. Never push, tag, or publish without the author.
-
-Stop and ask the author for: a product or copy decision; anything needing their phone, headset,
-accounts, keys or secrets; and a reviewer finding you have rebutted twice with evidence. Do not
-stop to ask "should I continue?".
+Then merge the branch into `dev`. `main` moves only when the human says so. Never push, tag or
+publish without the human.
 
 ## Rules
 
-- Stage explicit paths only. Never `git add -A`.
-- Never commit `keystore.properties`, `*.jks`, `.tmp/` or `.superpowers/`.
-- Every native renderer call happens on the GL thread that owns the renderer
-  (`RenderCommands`); playback and audio state live on the main thread.
-- User-visible copy is exact and needs the author's approval.
-- Bundled content is pinned by commit and by per-file hash (`app/bundled-presets.txt`,
-  `app/bundled-transitions.txt`); changing the bundle means changing those lists.
+- Branch off `dev` for each piece of work. Stage explicit paths; never `git add -A`. Never commit
+  `keystore.properties`, `*.jks`, `.tmp/` or `.superpowers/`.
+- Install test builds beside the human's app with `-PkogglesAppIdSuffix`, never over it.
+- Every native renderer call runs on the GL thread that owns the renderer (`RenderCommands`);
+  playback and audio state live on the main thread.
 - Don't modify `third_party/projectm` or `third_party/cardboard`; use build options and the
-  public API.
-- When a test fails or flakes, first ask what real problem it could indicate. Several real bugs in
-  this project surfaced as "flaky" tests.
-- Report outcomes faithfully: say what ran, what passed, what is pending, and what you did not do.
+  public API. Bundled content is pinned by commit and per-file hash in `app/bundled-*.txt`.
+- User-visible copy is exact and needs the human's approval.
+- A failing or flaky test is a real problem until shown otherwise; diagnose before changing it.
+- Report faithfully: what ran, what passed, what is pending, what you did not do.
+
+Stop and ask the human for a product or copy decision, for anything needing their phone, headset,
+accounts, keys or secrets, and for a reviewer finding you have rebutted twice with evidence. Do not
+stop to ask "should I continue?".
 
 ## Reviewer pin
 
-The adversarial reviewer is the OpenAI Codex companion, pinned per phase in its ledger. Model pin:
-
-ttp-codex-model: gpt-6.1-sol
+Codex model: `gpt-6.1-sol`.
