@@ -44,10 +44,11 @@ class AptabaseTransportTest {
         accepted.forEach { runCatching { it.close() } }
     }
 
-    private fun telemetry() = AptabaseTelemetry(
+    private fun telemetry(debug: Boolean = BuildConfig.APTABASE_DEBUG) = AptabaseTelemetry(
         InstrumentationRegistry.getInstrumentation().targetContext,
         key = "A-SH-test", // the SDK requires exactly three dash-separated parts
         host = "http://127.0.0.1:${server.localPort}",
+        debug = debug,
     )
 
     /** Reads one HTTP request from [s]; answers 200 only after [respond] is true. Returns the parsed JSON body. */
@@ -87,12 +88,27 @@ class AptabaseTransportTest {
         assertEquals(Build.MODEL, sys.getString("deviceModel"))
         assertEquals("Android", sys.getString("osName"))
         assertEquals(Build.VERSION.RELEASE, sys.getString("osVersion"))
+        assertEquals("a debug build reports as debug data", true, sys.getBoolean("isDebug"))
+        assertEquals("aptabase-kotlin@0.1.0", sys.getString("sdkVersion"))
         val props = body.getJSONObject("props")
         assertEquals(setOf("source", "goggles", "wide_view"), props.keys().asSequence().toSet())
         assertEquals(0, props.getInt("source"))
         assertEquals(1, props.getInt("goggles"))
         assertEquals(2, props.getInt("wide_view"))
         assertTrue(body.getString("sessionId"), Regex("[0-9a-f-]{36}").matches(body.getString("sessionId")))
+    }
+
+    /**
+     * The debug flag on the wire is our rule (BuildConfig.APTABASE_DEBUG), not the SDK's reading of the build's
+     * debuggable flag: a suffixed release smoke install is not debuggable yet must report as debug data, and this
+     * debuggable test build can be told to report as release.
+     */
+    @Test fun trackingModeIsOurs_notTheDebuggableFlag() {
+        telemetry(debug = false).track(Event.CalibrationFinished)
+        val s = accepted.poll(10, TimeUnit.SECONDS) ?: error("no request within 10 s")
+        val body = readRequest(s)
+        respond(s)
+        assertEquals(false, body.getJSONObject("systemProps").getBoolean("isDebug"))
     }
 
     /**

@@ -1,6 +1,7 @@
 package dev.koggles
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BuildConfigTest {
@@ -10,12 +11,14 @@ class BuildConfigTest {
     }
 
     /**
-     * Unit tests run against the debug build, and a debug build never carries the Aptabase key, even on a machine
-     * where -PkogglesAptabaseKey is set (the author's). Only the release build type takes the key, so development
-     * installs and test runs can never report into the dashboard, and this test holds everywhere.
+     * What counts as real data (the author, 2026-10-15): only an unsuffixed release build reports release events.
+     * The debug build type and any build with an app id suffix (.smoke, .brand, .sweep) report as debug data, which
+     * the dashboard shows separately, so development and test use never pollute the release numbers. Unit tests run
+     * against the debug build, so the flag is true here whatever key the machine passes.
      */
     @Test
-    fun debugBuildNeverCarriesTheAptabaseKey() {
-        assertEquals("", BuildConfig.APTABASE_KEY)
+    fun debugAndSuffixedBuildsReportAsDebugData() {
+        assertTrue(BuildConfig.APTABASE_DEBUG)
+        assertEquals(BuildConfig.DEBUG || BuildConfig.APPLICATION_ID != "dev.koggles", BuildConfig.APTABASE_DEBUG)
     }
 }
