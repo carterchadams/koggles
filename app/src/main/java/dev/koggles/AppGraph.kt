@@ -107,7 +107,7 @@ object AppGraph {
     /** Main thread. */
     fun setAnalytics(on: Boolean) {
         telemetry.setEnabled(on)
-        appScope.launch(Dispatchers.IO) { consent.write(on) }
+        consent.set(on)
     }
 
     /** Where the consent is persisted: its own file, outside the backup (see [ConsentStore]). */
@@ -181,7 +181,7 @@ object AppGraph {
         // One small blocking read at process start so the audio machine begins with the persisted
         // source and explainer flag; DataStore reads on its own IO scope, so this cannot deadlock main.
         val persisted = runBlocking { settings.values.first() }
-        consent = ConsentStore(ConsentStore.file(app))
+        consent = ConsentStore(ConsentStore.file(app), appScope)
         telemetry = ConsentGate(consent.read() && analyticsAvailable) {
             // Built on the first consented event. The SDK is initialised then and only then, and only if no test
             // has put a fake behind the gate; the fake is looked up per event so a test can swap it.

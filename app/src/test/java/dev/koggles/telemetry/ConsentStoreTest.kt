@@ -11,6 +11,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 
 /**
  * Consent is a marker file of its own under noBackupFilesDir, not a settings key (Codex, implementation reviews
@@ -20,14 +22,16 @@ import java.io.File
 class ConsentStoreTest {
     @get:Rule val tmp = TemporaryFolder()
 
+    private val scope = CoroutineScope(Dispatchers.IO)
+
     private fun file(): File = tmp.root.resolve("consent/analytics")
 
     @Test fun defaultsToFalse() {
-        assertEquals(false, ConsentStore(file()).read())
+        assertEquals(false, ConsentStore(file(), scope).read())
     }
 
     @Test fun roundTrips() {
-        val s = ConsentStore(file())
+        val s = ConsentStore(file(), scope)
         assertTrue(s.write(true))
         assertEquals(true, s.read())
         assertTrue(s.write(false))
@@ -36,7 +40,7 @@ class ConsentStoreTest {
 
     @Test fun optingOutLeavesNoFileBehind() {
         val f = file()
-        val s = ConsentStore(f)
+        val s = ConsentStore(f, scope)
         s.write(true)
         s.write(false)
         assertFalse("a stale file would read as consent after a restart", f.exists())
@@ -46,7 +50,7 @@ class ConsentStoreTest {
         val dir = tmp.newFolder("locked")
         assumeTrue("needs a directory the test can make read-only", dir.setWritable(false) && !dir.canWrite())
         try {
-            val s = ConsentStore(dir.resolve("analytics"))
+            val s = ConsentStore(dir.resolve("analytics"), scope)
             assertFalse(s.write(true))
             assertEquals(false, s.read())
         } finally {
