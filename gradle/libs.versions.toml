@@ -21,7 +21,7 @@ cardboardProtobufJavalite = "3.19.4"
 cardboardJspecify = "1.0.0"
 # Anonymous opt-in usage statistics (telemetry/AptabaseTelemetry.kt). 0.1.0 compiles against API 37; 0.0.8 stays
 # within this project's SDK levels and differs only by a tracking-mode option we do not use.
-aptabase = "0.0.8"
+aptabase = "0.1.0"
 # Bundled content (Task 12): commit SHAs of the projectM content repos, fetched at build time.
 # https://github.com/projectM-visualizer/presets-projectm-classic (the Koggles Starter Pack is a
 # hash-pinned selection from it: app/bundled-presets.txt)

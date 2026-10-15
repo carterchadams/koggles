@@ -68,7 +68,7 @@ Koggles sends nothing anywhere unless you turn on **Share anonymous usage statis
 
 With it on, the app sends event counts to [Aptabase](https://aptabase.com), hosted in the United States: app started, session length in minutes, goggles mode on or off, wide view mode, viewer QR scanned, spacing calibration finished. Each event carries your phone model, Android version, app version and build number, language, whether the build is a debug build, the analytics library's version, a timestamp, and a random session ID that changes after an hour without use or when the app restarts. Aptabase derives your country from your IP address and a daily-changing anonymous hash to estimate how many people use the app; it does not store the IP address. No account, no advertising ID, no audio, no preset names, no file paths.
 
-Turn the switch off at any time and nothing more is sent; an event accepted just before you did may still be delivered once the network allows. Aptabase keeps analytics data for up to five years. It cannot be linked back to you, which also means it cannot be deleted on request. The exact list of events and fields is pinned by the tests `EventTest` and `AptabaseTransportTest`.
+Development and test builds of Koggles report as debug data, which the dashboard keeps apart from real installs. Turn the switch off at any time and nothing more is sent; an event accepted just before you did may still be delivered once the network allows. Aptabase keeps analytics data for up to five years. It cannot be linked back to you, which also means it cannot be deleted on request. The exact list of events and fields is pinned by the tests `EventTest` and `AptabaseTransportTest`.
 
 ## Build from source
 
@@ -117,7 +117,7 @@ Without `keystore.properties`, the release APK is left unsigned and the build pr
 
 Preset sweeps are separate from the instrumented suite. The shader check enables projectM diagnostics to distinguish successful compilation from a fallback shader. Release-tooling checks are in the scripts matching `tools/ci/test-*.sh`.
 
-For device work, `-PkogglesAppIdSuffix=.sweep` installs a build alongside the main app. `-PkogglesShaderDiagnostics` enables and captures projectM's preset-debug output. `-PkogglesAptabaseKey=<key>` builds an Aptabase app key into a release build; debug builds never carry one. Without a key the analytics switch is hidden and nothing is ever sent, which is how every test run, every plain CI build and every fork builds (the key is public but deliberately not in the repository; see RELEASING.md).
+For device work, `-PkogglesAppIdSuffix=.sweep` installs a build alongside the main app. `-PkogglesShaderDiagnostics` enables and captures projectM's preset-debug output. `-PkogglesAptabaseKey=<key>` builds in an Aptabase app key. A debug build, or any build with an app id suffix, reports as debug data; only an unsuffixed release reports real installs. Without a key the analytics switch is hidden and nothing is ever sent, which is how every plain CI build and every fork builds (the key is public but deliberately not in the repository; see RELEASING.md).
 
 ## Replacing libprojectM
 

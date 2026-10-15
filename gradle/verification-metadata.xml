@@ -17,15 +17,15 @@
       </trusted-artifacts>
    </configuration>
    <components>
-      <component group="com.github.aptabase" name="aptabase-kotlin" version="0.0.8">
-         <artifact name="aptabase-kotlin-0.0.8.aar">
-            <sha256 value="ab05054ebcb88c99fa24249765867983358c9321aa2a1752b627ad1db89cb183" origin="sha256sum of the JitPack artifact, 2026-10-14"/>
+      <component group="com.github.aptabase" name="aptabase-kotlin" version="0.1.0">
+         <artifact name="aptabase-kotlin-0.1.0.aar">
+            <sha256 value="deef40674d6110e450e4836ff7e128b431cc3546888d09568b71c06537356b3a" origin="sha256sum of the JitPack artifact, 2026-10-15"/>
          </artifact>
-         <artifact name="aptabase-kotlin-0.0.8.module">
-            <sha256 value="0ec0229573adcbaf670c9fcc1a7bb6e53d4495771d968dc01a5f406b31c20d4c" origin="sha256sum of the JitPack artifact, 2026-10-14"/>
+         <artifact name="aptabase-kotlin-0.1.0.module">
+            <sha256 value="ff0bc413e0e625b0c7b8bd66a388d83fd8df869c28681962e9afd0d87fc47b24" origin="sha256sum of the JitPack artifact, 2026-10-15"/>
          </artifact>
-         <artifact name="aptabase-kotlin-0.0.8.pom">
-            <sha256 value="8a44c6b562a4e820cd212dd2383a62faf3728b10e7d6ca119f270d960d8614a2" origin="sha256sum of the JitPack artifact, 2026-10-14"/>
+         <artifact name="aptabase-kotlin-0.1.0.pom">
+            <sha256 value="0f4aaf8f109d3e1f60d8e5e8317324197a5c945fd48588b7297ac9cece4dfc01" origin="sha256sum of the JitPack artifact, 2026-10-15"/>
          </artifact>
       </component>
    </components>
