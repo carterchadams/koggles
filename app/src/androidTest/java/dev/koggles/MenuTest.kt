@@ -188,11 +188,11 @@ class MenuTest {
             switch.assertIsOff()
             switch.performClick()
             compose.waitUntil(3_000) { AppGraph.telemetry.enabled.value }
-            compose.waitUntil(3_000) { runBlocking { AppGraph.consent.read() } }
+            compose.waitUntil(3_000) { AppGraph.consent.read() }
             switch.assertIsOn()
             switch.performClick()
             compose.waitUntil(3_000) { !AppGraph.telemetry.enabled.value }
-            compose.waitUntil(3_000) { !runBlocking { AppGraph.consent.read() } }
+            compose.waitUntil(3_000) { !AppGraph.consent.read() }
             switch.assertIsOff()
         } finally {
             compose.runOnUiThread { AppGraph.setAnalytics(false) }
