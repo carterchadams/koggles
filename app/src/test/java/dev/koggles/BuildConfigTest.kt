@@ -9,9 +9,13 @@ class BuildConfigTest {
         assertEquals("dev.koggles", BuildConfig.APPLICATION_ID)
     }
 
-    /** Without -PkogglesAptabaseKey (plain CI, forks, local builds) the key is empty and analytics is unavailable. */
+    /**
+     * Unit tests run against the debug build, and a debug build never carries the Aptabase key, even on a machine
+     * where -PkogglesAptabaseKey is set (the author's). Only the release build type takes the key, so development
+     * installs and test runs can never report into the dashboard, and this test holds everywhere.
+     */
     @Test
-    fun aptabaseKeyIsEmptyWithoutTheGradleProperty() {
+    fun debugBuildNeverCarriesTheAptabaseKey() {
         assertEquals("", BuildConfig.APTABASE_KEY)
     }
 }
