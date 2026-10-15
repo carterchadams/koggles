@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- Only for the anonymous opt-in usage statistics (README: Privacy); nothing else uses the network. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".KogglesApp"

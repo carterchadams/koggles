@@ -62,6 +62,14 @@ Koggles uses device audio only and offers two capture modes:
 
 How the visuals respond can vary by phone, audio route, and the app playing the audio. After 10 seconds without detected audio, Koggles displays a hint. If another app is using the audio visualizer, Koggles reports the conflict and retries until it becomes available.
 
+### Privacy
+
+Koggles sends nothing anywhere unless you turn on **Share anonymous usage statistics** on the first screen or in the menu's Privacy section. The switch is off on every new install, including one restored from an Android backup: your other settings are restored, your consent is not.
+
+With it on, the app sends event counts to [Aptabase](https://aptabase.com), hosted in the United States: app started, session length in minutes, goggles mode on or off, wide view mode, viewer QR scanned, spacing calibration finished. Each event carries your phone model, Android version, app version and build number, language, whether the build is a debug build, the analytics library's version, a timestamp, and a random session ID that changes after an hour without use or when the app restarts. Aptabase derives your country from your IP address and a daily-changing anonymous hash to estimate how many people use the app; it does not store the IP address. No account, no advertising ID, no audio, no preset names, no file paths.
+
+Development and test builds of Koggles report as debug data, which the dashboard keeps apart from real installs. Turn the switch off at any time and nothing more is sent; an event accepted just before you did may still be delivered once the network allows. Aptabase keeps analytics data for up to five years. It cannot be linked back to you, which also means it cannot be deleted on request. The exact list of events and fields is pinned by the tests `EventTest` and `AptabaseTransportTest`.
+
 ## Build from source
 
 Prerequisites:
@@ -109,7 +117,7 @@ Without `keystore.properties`, the release APK is left unsigned and the build pr
 
 Preset sweeps are separate from the instrumented suite. The shader check enables projectM diagnostics to distinguish successful compilation from a fallback shader. Release-tooling checks are in the scripts matching `tools/ci/test-*.sh`.
 
-For device work, `-PkogglesAppIdSuffix=.sweep` installs a build alongside the main app. `-PkogglesShaderDiagnostics` enables and captures projectM's preset-debug output.
+For device work, `-PkogglesAppIdSuffix=.sweep` installs a build alongside the main app. `-PkogglesShaderDiagnostics` enables and captures projectM's preset-debug output. `-PkogglesAptabaseKey=<key>` builds in an Aptabase app key. A debug build, or any build with an app id suffix, reports as debug data; only an unsuffixed release reports real installs. Without a key the analytics switch is hidden and nothing is ever sent, which is how every plain CI build and every fork builds (the key is public but deliberately not in the repository; see RELEASING.md).
 
 ## Replacing libprojectM
 

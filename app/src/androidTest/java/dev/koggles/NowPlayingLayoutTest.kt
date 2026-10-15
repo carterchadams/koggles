@@ -25,7 +25,7 @@ class NowPlayingLayoutTest {
     /** A 320 dp phone: the panel's padding leaves ~264 dp for the six controls. */
     @Test fun allSixControls_fitAt320dp() {
         val actions = MenuActions(
-            MenuTest.FakePlayback(), AppGraph.library, AppGraph.settings, MainScope(), {}, {}, {}, {}, {},
+            MenuTest.FakePlayback(), AppGraph.library, AppGraph.settings, MainScope(), {}, {}, {}, {}, {}, {}, {},
         )
         val ref = AppGraph.libraryRepo.state.value.catalog.packs.firstOrNull()?.presets?.firstOrNull()
         compose.setContent {

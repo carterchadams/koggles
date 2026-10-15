@@ -14,21 +14,29 @@ import dev.koggles.settings.LENS_OFFSET_RANGE
 import dev.koggles.settings.SettingsValues
 import dev.koggles.settings.effectiveLensOffsetMm
 import dev.koggles.settings.withLensOffsetForCurrentMode
+import dev.koggles.telemetry.Event
 
 @OptIn(ExperimentalLayoutApi::class)
 internal fun LazyListScope.displaySection(v: SettingsValues, actions: MenuActions) {
     item(key = "display-header") { SectionHeader("Display") }
     item(key = "display-body") {
-        SwitchRow("Goggles mode", v.goggles) { on -> actions.updateSettings { it.copy(goggles = on) } }
+        SwitchRow("Goggles mode", v.goggles) { on ->
+            actions.updateSettings { it.copy(goggles = on) }
+            actions.track(Event.GogglesToggled(on))
+        }
         if (v.goggles) {
             OutlinedButton(onClick = actions.onScanQr) { Text("Scan viewer QR") }
             // Wide view (the author, 2026-10-13): the field of view opened to the screen edges, and with a
             // window each eye sees its own side of the frame. Each view keeps its own lens spacing.
             Text("Wide view")
             FlowRow(Modifier.testTag("wide-view"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(v.wideView == 0, { actions.updateSettings { it.copy(wideView = 0) } }, { Text("Off") })
-                FilterChip(v.wideView == 1, { actions.updateSettings { it.copy(wideView = 1) } }, { Text("Wide") })
-                FilterChip(v.wideView == 2, { actions.updateSettings { it.copy(wideView = 2) } }, { Text("Wide + window") })
+                val setWide = { mode: Int ->
+                    actions.updateSettings { it.copy(wideView = mode) }
+                    actions.track(Event.WideViewSet(mode))
+                }
+                FilterChip(v.wideView == 0, { setWide(0) }, { Text("Off") })
+                FilterChip(v.wideView == 1, { setWide(1) }, { Text("Wide") })
+                FilterChip(v.wideView == 2, { setWide(2) }, { Text("Wide + window") })
             }
             StepSlider(
                 "Lens spacing", v.effectiveLensOffsetMm(), LENS_OFFSET_RANGE, 0.5f, { "%+.1f mm".format(it) },
