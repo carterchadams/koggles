@@ -210,6 +210,13 @@ android {
         versionCode = tagVersionCode?.toInt() ?: 1
         versionName = tagVersionName ?: "0.1.0"
         testInstrumentationRunner = "dev.koggles.KogglesTestRunner"
+        // Aptabase app key for the anonymous opt-in usage statistics. Public by design (it ships in the APK) but
+        // kept out of the tree so a fork does not inherit it: the release workflow passes it from the repository
+        // variable KOGGLES_APTABASE_KEY; locally -PkogglesAptabaseKey or ~/.gradle/gradle.properties. Empty (plain
+        // CI, forks) = analytics unavailable: the switch is hidden and the SDK is never touched. What a keyed build
+        // reports as is APTABASE_DEBUG, set per build type below.
+        val aptabaseKey = providers.gradleProperty("kogglesAptabaseKey").orNull.orEmpty()
+        buildConfigField("String", "APTABASE_KEY", "\"$aptabaseKey\"")
         ndk {
             abiFilters += "arm64-v8a"
         }
@@ -264,11 +271,18 @@ android {
             // Optional side-by-side install for device experiments (e.g. the preset sweep), so a
             // debug build never has to replace an installed release build: -PkogglesAppIdSuffix=.sweep
             providers.gradleProperty("kogglesAppIdSuffix").orNull?.let { applicationIdSuffix = it }
+            // Debug builds report as debug data (the dashboard's separate debug view), never as release numbers.
+            buildConfigField("boolean", "APTABASE_DEBUG", "true")
         }
         release {
             // Device experiments only: a suffixed, still-minified release installs next to the real app
             // (release smoke on a phone with Koggles installed): -PkogglesAppIdSuffix=.smoke
-            providers.gradleProperty("kogglesAppIdSuffix").orNull?.let { applicationIdSuffix = it }
+            val suffix = providers.gradleProperty("kogglesAppIdSuffix").orNull
+            suffix?.let { applicationIdSuffix = it }
+            // Only an unsuffixed release is a real install: a suffixed release (.smoke, a device experiment) reports
+            // as debug data like every debug build. The release workflow builds unsuffixed and refuses to run
+            // without the key, so it never ships a keyless release silently.
+            buildConfigField("boolean", "APTABASE_DEBUG", "${suffix != null}")
             signingConfig = releaseSigning
             isMinifyEnabled = true
             isShrinkResources = true
@@ -328,6 +342,8 @@ dependencies {
     implementation(libs.material)
     implementation(libs.protobuf.javalite)
     implementation(libs.jspecify)
+    // The SDK declares androidx.test:monitor as a production dependency; it has no business in the app.
+    implementation(libs.aptabase) { exclude(group = "androidx.test") }
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

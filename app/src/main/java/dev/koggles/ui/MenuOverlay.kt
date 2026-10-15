@@ -40,6 +40,7 @@ import dev.koggles.ui.menu.licensesItem
 import dev.koggles.ui.menu.nowPlayingSection
 import dev.koggles.ui.menu.packsSection
 import dev.koggles.ui.menu.playbackSection
+import dev.koggles.ui.menu.privacySection
 
 /** Everything the menu shows, collected by the caller. */
 data class MenuModel(
@@ -51,6 +52,8 @@ data class MenuModel(
     val skipped: Set<String>,
     val audio: AudioSnapshot,
     val silence: Boolean,
+    /** The consent gate's state; null = analytics unavailable in this build (no Privacy section). */
+    val analytics: Boolean? = null,
 )
 
 /**
@@ -117,6 +120,7 @@ private fun MenuList(
         )
         librarySection(model.library, highlightChooseFolder, actions)
         audioSection(model.audio, model.silence, actions)
+        privacySection(model.analytics, actions)
         licensesItem(onOpenLicenses)
     }
 }

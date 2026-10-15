@@ -166,5 +166,6 @@ class Settings(private val store: DataStore<Preferences>) {
         val scope = stringPreferencesKey("settings.scope")
         val lastPresetKey = stringPreferencesKey("settings.lastPresetKey")
         val folderPrompted = booleanPreferencesKey("settings.folderPrompted")
+        // The analytics consent is not a setting: it lives in telemetry/ConsentStore, outside the backup.
     }
 }

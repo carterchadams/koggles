@@ -1,195 +1,140 @@
 # Koggles
 
-[![Koggles: a person in a phone VR headset in front of neon music visuals](images/KogglesREADMEBanner.png)](https://github.com/carterchadams/koggles/releases/download/current/koggles-current.apk)
+[![Download Koggles for Android](images/KogglesREADMEBanner.png)](https://github.com/carterchadams/koggles/releases/download/current/koggles-current.apk)
 
-Koggles is an Android music visualizer built on [projectM](https://github.com/projectM-visualizer/projectm),
-the open-source reimplementation of Winamp's MilkDrop. It reacts to whatever your phone is playing
-and runs full screen, or in **goggles mode**: side-by-side with lens correction, for phone VR mounts
-such as Google Cardboard and its many look-alikes.
+Koggles is a music visualizer for Android, built for full-screen viewing and inexpensive phone-mount goggles. Watch the visuals respond to audio playing on your phone, or switch to **goggles mode** for a lens-corrected, side-by-side view in a mount such as Google Cardboard.
 
-- **Bundled presets:** the Koggles Starter Pack, a selection of 299 presets from projectM's
-  [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), and the MilkDrop texture pack.
-- **Your own packs:** choose a folder once (for example `Documents/Koggles/<pack>/…`) and its
-  presets join the rotation.
-- **Wide view (goggles mode):** the picture opens out to the edges of the screen instead of
-  stopping at the viewer's nominal field of view; *Wide + window* also gives each eye its own side
-  of the frame, so the outer periphery shows more of its own side. Each view keeps its own lens
-  spacing, with defaults computed for your phone and viewer, and *Configure spacing with volume
-  buttons* puts two bullseyes in the headset so you can tune it by eye; double-tap the screen, or
-  press the mount's trigger twice, to finish.
-- **Gestures:** tap for the next preset; double-tap for the menu (playback, packs and browser,
-  display, library, audio).
-- **First launch:** the one screen before the audio permission carries a photosensitivity warning:
-  the visualizations include intense moving and flashing lights.
-- **Audio:** device audio only. *Standard* uses Android's Visualizer and needs one ordinary
-  permission. *High quality* (opt-in) uses playback capture: "Higher fidelity; some apps block it
-  and it asks again after locking".
+Powered by [projectM](https://github.com/projectM-visualizer/projectm), the open-source reimplementation of Winamp's MilkDrop, Koggles includes **299 presets** in its Starter Pack, along with the MilkDrop texture pack. Explore the bundled collection, add your own preset packs, and mark favorites within each pack.
 
-## How this was built
+<img src="images/screenshots.png" alt="Koggles screenshots: full-screen visuals in a phone frame on the left, and side-by-side goggles mode on the right." width="100%">
 
-Koggles is a rapid development cycle built on several weeks of experience with a prior prototype,
-which was a direct extension of projectM's legacy reference Android app. The prototype showed what
-mattered (lens spacing, a usable menu, audio that works without ceremony) and what hurt (carrying
-local modifications to projectM). This repo started over with those lessons and three decisions:
+[**Download APK**](https://github.com/carterchadams/koggles/releases/download/current/koggles-current.apk) · [Releases](https://github.com/carterchadams/koggles/releases) · [Case study: design and AI-assisted development](CASE_STUDY.md)
 
-1. **Use projectM unmodified**, as a pinned shared library, instead of modifying a fork as the
-   prototype did. Every projectM behaviour Koggles needs is reached through its public API and
-   build options; a modified projectM can still be dropped in (see "Replacing libprojectM").
-2. **Use Google's Cardboard SDK** for lens distortion and viewer profiles (QR scan), to make the
-   goggles experience ergonomic rather than hand-tuned.
-3. **Offer two audio capture paths:** a low-fidelity one with easy device permissions
-   (Android's Visualizer), and a high-fidelity one (playback capture) whose permissions are more
-   finicky and re-prompt on some Android versions. The user picks.
+**Photosensitivity warning:** The visualizations contain intense moving and flashing lights. The app also presents a warning on first launch, before requesting audio access.
 
-The app was then built by AI coding agents (Claude Code) working from a written spec and a
-task-by-task engineering plan, with the author directing. Each task followed the same loop: write
-the failing test first, make it pass, then submit the change to an independent adversarial
-reviewer (OpenAI Codex) and revise until it approved. Phases ended with device gates. Most checks
-that needed a real phone were automated over USB (adb-driven installs, instrumented tests, log and
-pixel capture on a Samsung Galaxy S25 FE), with the author doing quick hands-on confirmation of
-real-world behaviour: menu scrolling with a finger, goggles mode in a mount, audio from other apps.
+## Install
 
-The process is only worth describing because of what it caught. Some examples:
+**Requirements:** Android 10 (API 29) or newer on a 64-bit ARM (arm64) device. Goggles mode is designed for Cardboard-compatible phone mounts.
 
-- **A wrong "no fix needed" claim.** The agent reported that every bundled preset compiled its
-  shaders, based on projectM's load callback. The reviewer pointed out that projectM silently
-  substitutes fallback shaders on failure, so the callback proved nothing. A diagnostics build was
-  added that captures projectM's own shader messages; only then was the claim re-measured
-  (and, that time, confirmed).
-- **A plan revision that was never committed.** The agent's commit message said the plan had been
-  revised; only the response notes had changed. The reviewer compared the commit against the base
-  and refused to proceed until the real revision landed.
-- **A gate marked PASS on emulator-only evidence.** The audio gate was labelled passed while its
-  own record listed phone-only checks as untested. The reviewer caught it; the record was corrected
-  to say exactly what had been tested.
-- **A "flaky" test that was a real bug.** A timing test failed one run in three. Instead of
-  loosening it, the author asked what real problem it could indicate: projectM randomises each
-  preset's duration by default, so the "30 s" setting was really 28–32 s. One API call fixed it.
-- **A phantom second bug from a bad measurement.** The menu-scrolling diagnosis blamed a second
-  cause because its metric (a screen-text dump) misreported a plain list as not scrolling. The
-  reviewer flagged the gap in evidence; re-measuring from the list's own state showed one cause.
-- **Rules the agent broke and then reported.** The agent used `git add -A` despite an explicit
-  rule against it, and made dozens of small decisions it had been told to raise with the author.
-  Its own review of the build admitted both, and an audit of every commit followed.
+Koggles is currently in prerelease. It has been developed and checked on a Samsung Galaxy S25 FE; testing on a wider range of phones and mounts is still needed.
 
-Confirmed on the phone by the author: headset fit with the default settings, and Bluetooth audio
-driving the visuals. Still open: rendering performance on the phone has not been measured in
-goggles mode.
+Download the [latest APK](https://github.com/carterchadams/koggles/releases/download/current/koggles-current.apk) and open it on your phone. When prompted, allow installation from the browser or file manager opening the file, then confirm the install.
 
-## Downloads
+Release APKs use the same signing key, so newer releases install over older ones. A debug build signed with a different key must be uninstalled first.
 
-Latest release, for a direct download:
-<https://github.com/carterchadams/koggles/releases/download/current/koggles-current.apk>
-(and its `koggles-current.apk.sha256`). That link always serves the newest release's APK under a
-fixed name; the `current` release is refreshed by every release.
+<details>
+<summary>Checksums and release files</summary>
 
-Signed APKs are published on the repository's
-[Releases](https://github.com/carterchadams/koggles/releases) page for each `vX.Y.Z` tag. Each
-release has six files:
-
-- `koggles-vX.Y.Z.apk`
-- `koggles-vX.Y.Z.apk.sha256`
-- `koggles-vX.Y.Z-mapping.txt`, the R8 mapping for crash reports
-- `koggles-vX.Y.Z-source.tar.gz`, the complete corresponding source, submodules included
-- `koggles-current.apk` and `koggles-current.apk.sha256`, the same APK under the fixed name above
-
-To verify a download before installing:
+To check a versioned download against its published SHA-256 checksum, download the APK and its matching `.sha256` file from the same release into one directory. Run the following, replacing `vX.Y.Z` with the version you downloaded:
 
 ```sh
 sha256sum -c koggles-vX.Y.Z.apk.sha256
 ```
 
-Installing is ordinary sideloading. Android asks you to allow installs from the app that opens
-the APK (a browser or file manager), then confirms the install. Every release is signed with the
-same key, so newer releases install over older ones. A debug build signed with a different key
-must be uninstalled first.
+The `current` download link is refreshed with each release. [Versioned releases](https://github.com/carterchadams/koggles/releases) also include checksums, the R8 mapping for crash reports, and the complete corresponding source with submodules included.
 
-## Building
+</details>
+
+## Using Koggles
+
+### Playback and presets
+
+Play audio on your phone, then open Koggles. **Tap once** to move to the next preset, or let presets advance automatically at your chosen interval. **Double-tap** to open the menu for playback, preset packs and browsing, display settings, the library, and audio options.
+
+To add your own collections, choose a primary folder on your device. Its subfolders become preset packages—for example, `Documents/Koggles/<pack>/…`. Select the packages you want to use and mark favorite presets within them. Collections stay as ordinary folders, so you can manage them through the filesystem.
+
+### Goggles and lens spacing
+
+Goggles mode uses Google's Cardboard SDK for lens correction and viewer profiles. Scan your mount's QR code to load its profile; without one, Koggles uses the Cardboard v1 profile.
+
+**Wide view** extends the picture toward the screen edges rather than stopping at the viewer's nominal field of view. **Wide + window** also gives each eye its own side of the frame. Each view keeps its own lens-spacing setting, with defaults calculated from the phone and viewer profile.
+
+Choose **Configure spacing with volume buttons** to display two bullseyes, one for each eye. Use the phone's volume buttons to adjust their spacing while looking through the headset. To return to the visuals, double-tap the screen or, if your mount has a trigger, press it twice. Back also works.
+
+**Testing status:** Wide, Wide + window and the spacing calibration have been checked hands-on in the headset. On a Galaxy S25 FE (Android 16), normal mode and goggles mode (Wide + window, distortion correction on) both run at the panel's full 120 fps with no dropped frames, measured over 20 s from SurfaceFlinger's frame timestamps (present-to-present p95 8.69 ms).
+
+### Audio and permissions
+
+Koggles uses device audio only and offers two capture modes:
+
+- **Standard** requires one ordinary Android permission and does not require fresh playback-capture consent after locking the phone.
+- **High quality** is opt-in, captures playback directly, and requires system consent. Some apps block capture. On Android 15 and newer, locking the phone ends the capture session, so Koggles asks for consent again when you return.
+
+How the visuals respond can vary by phone, audio route, and the app playing the audio. After 10 seconds without detected audio, Koggles displays a hint. If another app is using the audio visualizer, Koggles reports the conflict and retries until it becomes available.
+
+### Privacy
+
+Koggles sends nothing anywhere unless you turn on **Share anonymous usage statistics** on the first screen or in the menu's Privacy section. The switch is off on every new install, including one restored from an Android backup: your other settings are restored, your consent is not.
+
+With it on, the app sends event counts to [Aptabase](https://aptabase.com), hosted in the United States: app started, session length in minutes, goggles mode on or off, wide view mode, viewer QR scanned, spacing calibration finished. Each event carries your phone model, Android version, app version and build number, language, whether the build is a debug build, the analytics library's version, a timestamp, and a random session ID that changes after an hour without use or when the app restarts. Aptabase derives your country from your IP address and a daily-changing anonymous hash to estimate how many people use the app; it does not store the IP address. No account, no advertising ID, no audio, no preset names, no file paths.
+
+Development and test builds of Koggles report as debug data, which the dashboard keeps apart from real installs. Turn the switch off at any time and nothing more is sent; an event accepted just before you did may still be delivered once the network allows. Aptabase keeps analytics data for up to five years. It cannot be linked back to you, which also means it cannot be deleted on request. The exact list of events and fields is pinned by the tests `EventTest` and `AptabaseTransportTest`.
+
+## Build from source
 
 Prerequisites:
 
-- JDK 21
-- Android SDK at `$HOME/Android/Sdk` (or `ANDROID_HOME`) with `platforms;android-36`,
-  `platforms;android-35`, `build-tools;36.0.0`, `ndk;29.0.14206865`, `cmake;3.22.1` and
-  `platform-tools`
+- JDK 21.
+- Android SDK at `$HOME/Android/Sdk` (or `ANDROID_HOME`) with `platforms;android-36`, `platforms;android-35`, `build-tools;36.0.0`, `ndk;29.0.14206865`, `cmake;3.22.1`, and `platform-tools`.
 
-```sh
+```bash
 git clone --recursive https://github.com/carterchadams/koggles.git
 cd koggles
-source tools/env.sh            # JAVA_HOME, ANDROID_HOME, PATH
-./gradlew :app:installDebug    # debug build onto a connected phone or emulator
+source tools/env.sh            # Sets JAVA_HOME, ANDROID_HOME, and PATH
+./gradlew :app:installDebug     # Builds and installs on a connected phone or emulator
 ```
 
-The first build fetches the bundled presets and textures from their pinned upstream commits,
-verifies every preset against `app/bundled-presets.txt` by SHA-256, and builds the Cardboard SDK
-from its submodule.
+The first build fetches bundled presets and textures from pinned upstream commits, verifies every preset against `app/bundled-presets.txt` by SHA-256, and builds the Cardboard SDK from its submodule.
 
-**Release builds** are signed when a `keystore.properties` exists at the repository root. It is
-gitignored and must never be committed:
+### Signed release builds
+
+To sign a release with your own keystore, create a `keystore.properties` file at the repository root:
 
 ```properties
 storeFile=/path/to/koggles-release.jks
-storePassword=…
+storePassword=YOUR_KEYSTORE_PASSWORD
 keyAlias=koggles
-keyPassword=…
+keyPassword=YOUR_KEY_PASSWORD
 ```
 
-Then run `./gradlew :app:assembleRelease`. Without the file, the release APK is left unsigned and
-the build prints a warning. Publishing releases is described in [RELEASING.md](RELEASING.md).
+The file is gitignored and must never be committed. Build with:
 
-**Tests:**
+```sh
+./gradlew :app:assembleRelease
+```
+
+Without `keystore.properties`, the release APK is left unsigned and the build prints a warning. See [RELEASING.md](RELEASING.md) for the publishing process.
+
+## Tests
 
 | Suite | Command |
 |---|---|
 | Unit | `./gradlew :app:testDebugUnitTest` |
-| Instrumented (device or emulator) | `./gradlew :app:connectedDebugAndroidTest` |
-| Host C++ (with TSAN) | `cmake -S native-tests -B build/host-tests && cmake --build build/host-tests -j && ctest --test-dir build/host-tests` |
-| Bundled-preset compile sweep (at will, not part of the instrumented suite) | `tools/ci/preset-sweep.sh` loads every bundled preset; `tools/ci/preset-sweep.sh --shaders` adds the shader gate (`-PkogglesShaderDiagnostics`) |
-| Release tooling | `tools/ci/test-*.sh` |
+| Instrumented, on a device or emulator | `./gradlew :app:connectedDebugAndroidTest` |
+| Host C++, with ThreadSanitizer (TSAN) | `cmake -S native-tests -B build/host-tests && cmake --build build/host-tests -j && ctest --test-dir build/host-tests` |
+| Bundled-preset sweep | `tools/ci/preset-sweep.sh` |
+| Bundled-preset shader validation | `tools/ci/preset-sweep.sh --shaders` |
 
-Useful build switches for device work: `-PkogglesAppIdSuffix=.sweep` installs a build beside the
-real app instead of replacing it; `-PkogglesShaderDiagnostics` turns on projectM's own
-preset-debug output and captures it, so tests can tell a preset whose shaders fell back from one
-that compiled.
+Preset sweeps are separate from the instrumented suite. The shader check enables projectM diagnostics to distinguish successful compilation from a fallback shader. Release-tooling checks are in the scripts matching `tools/ci/test-*.sh`.
+
+For device work, `-PkogglesAppIdSuffix=.sweep` installs a build alongside the main app. `-PkogglesShaderDiagnostics` enables and captures projectM's preset-debug output. `-PkogglesAptabaseKey=<key>` builds in an Aptabase app key. A debug build, or any build with an app id suffix, reports as debug data; only an unsuffixed release reports real installs. Without a key the analytics switch is hidden and nothing is ever sent, which is how every plain CI build and every fork builds (the key is public but deliberately not in the repository; see RELEASING.md).
 
 ## Replacing libprojectM
 
-projectM is LGPL-2.1 and ships as a separate shared library (`lib/arm64-v8a/libprojectM-4.so`).
-To use a modified projectM:
+projectM is LGPL-2.1 and ships as a separate shared library at `lib/arm64-v8a/libprojectM-4.so`. To build with a modified version:
 
-1. Unpack a release's `koggles-vX.Y.Z-source.tar.gz`. It contains the exact projectM revision
-   under `third_party/projectm`.
-2. Change projectM there.
-3. Build with your own signing key (`keystore.properties`, above):
-   `./gradlew :app:assembleRelease`.
+1. Unpack a release's `koggles-vX.Y.Z-source.tar.gz`, which includes the exact projectM revision under `third_party/projectm`.
+2. Make your changes in `third_party/projectm`.
+3. Configure your own signing key in `keystore.properties` and run `./gradlew :app:assembleRelease`.
 
-Android requires every APK to be signed, so a rebuilt APK carries your key, not the original.
+The rebuilt APK carries your signing key, not the project's release key.
 
-## Licenses
+## Credits and licenses
 
-- **Koggles:** MIT, see [LICENSE](LICENSE).
-- **projectM:** LGPL-2.1, used unmodified as a shared library; the corresponding source ships
-  with every release.
+- **Koggles:** MIT; see [LICENSE](LICENSE).
+- **projectM:** LGPL-2.1, used unmodified as a shared library. The corresponding source ships with every release.
 - **Google Cardboard SDK:** Apache-2.0.
-- **Koggles Starter Pack presets:** a selection from projectM's
-  [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), whose
-  repository states no license. They are distributed under the projectM team's statement that
-  MilkDrop presets are safe to treat as public domain, and that it removes presets on request
-  (`LICENSE.md` in its `presets-cream-of-the-crop` repository). The app quotes it verbatim in
-  `assets/licenses/koggles-starter-pack-presets.md`.
-- **MilkDrop texture pack:** the textures shipped with MilkDrop plus others used by presets; the
-  pack states no license.
+- **Koggles Starter Pack presets:** selected from projectM's [classic preset pack](https://github.com/projectM-visualizer/presets-projectm-classic), whose repository states no license. They are distributed under the projectM team's statement that MilkDrop presets are safe to treat as public domain and that it removes presets on request (`LICENSE.md` in its `presets-cream-of-the-crop` repository). The app quotes this statement verbatim in `assets/licenses/koggles-starter-pack-presets.md`.
+- **MilkDrop texture pack:** textures shipped with MilkDrop, plus others used by presets. The pack states no license.
 
-All licence texts are in the app under *Library → About & licenses*.
-
-## Known limits
-
-- **Device audio:** some apps block playback capture, and the Visualizer API reacts differently
-  across phones and audio routes. The hint "No audio detected — some apps block capture" appears
-  after 10 s of silence. If another app holds the Visualizer, Koggles says so and retries until
-  it is free.
-- **High quality on Android 15+:** locking the phone ends the capture session, so High quality
-  asks for consent again (one tap) on return. Standard does not.
-- **In the headset:** lens spacing is per view: Off, Wide and Wide + window each keep their own,
-  because the wide views move the picture relative to the lenses. Frame timing in goggles mode on
-  a physical phone has not been measured.
+License texts and bundled-content notices are available in the app under **Library → About & licenses**.
