@@ -74,4 +74,40 @@ class ConsentStoreTest {
         assertEquals(false, s.read())
         assertFalse(f.exists())
     }
+
+    /**
+     * Codex, round 4 (2026-10-15): an opt-out that is only queued is lost if the process dies before the writer runs,
+     * and the next start would read the old "on". So opting out deletes the file before [ConsentStore.set] returns,
+     * on the caller's thread (one unlink in private storage); only opting in is queued, since losing that is safe.
+     */
+    @Test fun optOutIsDurableBeforeSetReturns_evenWithTheWriterWithheld() = runTest {
+        val f = file()
+        val withheld = StandardTestDispatcher(testScheduler)
+        val s = ConsentStore(f, scope = this, io = withheld)
+        assertTrue(s.write(true))
+        s.set(false)
+        // No advanceUntilIdle: the writer never runs, as if the process died right here.
+        assertEquals(false, ConsentStore(f, scope = this, io = withheld).read())
+        assertFalse(f.exists())
+    }
+
+    /** A queued opt-in made before an opt-out must not recreate the file when it finally runs. */
+    @Test fun aStaleQueuedOptInCannotResurrectConsent() = runTest {
+        val f = file()
+        val s = ConsentStore(f, scope = this, io = StandardTestDispatcher(testScheduler))
+        s.set(true) // queued, not yet run
+        s.set(false) // durable now
+        testScheduler.advanceUntilIdle() // the stale opt-in runs
+        assertEquals(false, s.read())
+        assertFalse(f.exists())
+    }
+
+    /** An opt-in made after an opt-out still lands. */
+    @Test fun anOptInAfterAnOptOutStillLands() = runTest {
+        val s = ConsentStore(file(), scope = this, io = StandardTestDispatcher(testScheduler))
+        s.set(false)
+        s.set(true)
+        testScheduler.advanceUntilIdle()
+        assertEquals(true, s.read())
+    }
 }
