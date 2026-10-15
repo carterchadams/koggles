@@ -127,7 +127,11 @@ class MainActivity : ComponentActivity() {
                 if (state == AudioState.ShowingExplainer || state.isAudioError()) {
                     Box(Modifier.fillMaxSize().blockTouchesBelow()) {
                         if (state == AudioState.ShowingExplainer) {
-                            Explainer { audio.dispatch(AudioEvent.ExplainerAccepted) }
+                            val analytics by AppGraph.telemetry.enabled.collectAsStateWithLifecycle()
+                            Explainer(
+                                analytics = if (AppGraph.analyticsAvailable) analytics else null,
+                                onAnalyticsChange = AppGraph::setAnalytics,
+                            ) { audio.dispatch(AudioEvent.ExplainerAccepted) }
                         } else {
                             AudioErrorScreen(
                                 state = state,
@@ -185,6 +189,7 @@ class MainActivity : ComponentActivity() {
         val skipped by AppGraph.library.skipped.collectAsStateWithLifecycle(emptySet())
         val snapshot by audio.snapshot.collectAsStateWithLifecycle()
         val silence by AppGraph.silenceHint.collectAsStateWithLifecycle()
+        val analytics by AppGraph.telemetry.enabled.collectAsStateWithLifecycle()
         val actions = remember {
             MenuActions(
                 playback = AppGraph.playbackControls,
@@ -208,7 +213,10 @@ class MainActivity : ComponentActivity() {
             )
         }
         MenuOverlay(
-            MenuModel(now, values, library, disabled, favorites, skipped, snapshot, silence),
+            MenuModel(
+                now, values, library, disabled, favorites, skipped, snapshot, silence,
+                analytics = if (AppGraph.analyticsAvailable) analytics else null,
+            ),
             actions,
             highlightChooseFolder,
             onClose = {

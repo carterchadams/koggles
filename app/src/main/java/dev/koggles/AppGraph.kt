@@ -100,7 +100,8 @@ object AppGraph {
     lateinit var telemetry: ConsentGate
         private set
 
-    val analyticsAvailable: Boolean get() = BuildConfig.APTABASE_KEY.isNotEmpty()
+    /** The build has an app key (or a test has put a vendor behind the gate). */
+    val analyticsAvailable: Boolean get() = BuildConfig.APTABASE_KEY.isNotEmpty() || telemetryOverride != null
 
     /** Main thread. */
     fun setAnalytics(on: Boolean) {
