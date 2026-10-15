@@ -117,7 +117,7 @@ Without `keystore.properties`, the release APK is left unsigned and the build pr
 
 Preset sweeps are separate from the instrumented suite. The shader check enables projectM diagnostics to distinguish successful compilation from a fallback shader. Release-tooling checks are in the scripts matching `tools/ci/test-*.sh`.
 
-For device work, `-PkogglesAppIdSuffix=.sweep` installs a build alongside the main app. `-PkogglesShaderDiagnostics` enables and captures projectM's preset-debug output. `-PkogglesAptabaseKey=<key>` builds in an Aptabase app key; without one the analytics switch is hidden and nothing is ever sent, which is how every plain CI build and every fork builds (the key is public but deliberately not in the repository; see RELEASING.md).
+For device work, `-PkogglesAppIdSuffix=.sweep` installs a build alongside the main app. `-PkogglesShaderDiagnostics` enables and captures projectM's preset-debug output. `-PkogglesAptabaseKey=<key>` builds an Aptabase app key into a release build; debug builds never carry one. Without a key the analytics switch is hidden and nothing is ever sent, which is how every test run, every plain CI build and every fork builds (the key is public but deliberately not in the repository; see RELEASING.md).
 
 ## Replacing libprojectM
 

@@ -210,12 +210,10 @@ android {
         versionCode = tagVersionCode?.toInt() ?: 1
         versionName = tagVersionName ?: "0.1.0"
         testInstrumentationRunner = "dev.koggles.KogglesTestRunner"
-        // Aptabase app key for the anonymous opt-in usage statistics. Public by design (it ships in the APK) but
-        // kept out of the tree so a fork does not inherit it: the release workflow passes it from the repository
-        // variable KOGGLES_APTABASE_KEY; locally it lives in ~/.gradle/gradle.properties. Empty = analytics
-        // unavailable (the switch is hidden and the SDK is never touched).
-        val aptabaseKey = providers.gradleProperty("kogglesAptabaseKey").orNull.orEmpty()
-        buildConfigField("String", "APTABASE_KEY", "\"$aptabaseKey\"")
+        // Aptabase app key for the anonymous opt-in usage statistics: empty here, so every debug build (development
+        // installs, unit and instrumented tests, plain CI, forks) has analytics unavailable: the switch is hidden and
+        // the SDK is never touched. The release build type alone takes the key; see buildTypes.release.
+        buildConfigField("String", "APTABASE_KEY", "\"\"")
         ndk {
             abiFilters += "arm64-v8a"
         }
@@ -275,6 +273,13 @@ android {
             // Device experiments only: a suffixed, still-minified release installs next to the real app
             // (release smoke on a phone with Koggles installed): -PkogglesAppIdSuffix=.smoke
             providers.gradleProperty("kogglesAppIdSuffix").orNull?.let { applicationIdSuffix = it }
+            // The Aptabase app key, release builds only. Public by design (it ships in the APK) but kept out of the
+            // tree so a fork does not inherit it: the release workflow passes it from the repository variable
+            // KOGGLES_APTABASE_KEY; a local release smoke passes -PkogglesAptabaseKey on the command line. Without it
+            // a release is keyless like every debug build (analytics unavailable, switch hidden), which the release
+            // workflow refuses rather than ship silently.
+            val aptabaseKey = providers.gradleProperty("kogglesAptabaseKey").orNull.orEmpty()
+            buildConfigField("String", "APTABASE_KEY", "\"$aptabaseKey\"")
             signingConfig = releaseSigning
             isMinifyEnabled = true
             isShrinkResources = true

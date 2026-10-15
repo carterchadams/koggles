@@ -36,8 +36,11 @@ gh variable set KOGGLES_CERT_SHA256 --body '<the SHA256 value>'
 
 **2b. Set the analytics key.** The Aptabase app key is public (it ships in the APK) but lives only in a
 repository variable, so a fork builds with the analytics switch hidden rather than reporting into your
-dashboard. The release workflow refuses to build without it; plain CI never needs it. Locally, put the
-same line in `~/.gradle/gradle.properties` as `kogglesAptabaseKey=<key>`.
+dashboard. The release workflow refuses to build without it; plain CI never needs it. Only the release
+build type takes the key: debug builds, tests and development installs are always keyless, so they can
+never report into the dashboard. For a local release smoke, pass it on the command line
+(`./gradlew :app:assembleRelease -PkogglesAptabaseKey=<key>`) rather than storing it in
+`~/.gradle/gradle.properties`.
 
 ```sh
 gh variable set KOGGLES_APTABASE_KEY --body '<the A-US-... key from the Aptabase console>'
