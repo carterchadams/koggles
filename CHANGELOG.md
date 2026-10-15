@@ -2,6 +2,12 @@
 
 Every release is a signed APK on the [Releases](https://github.com/carterchadams/koggles/releases) page; the notes there carry the same text plus each file's SHA-256. All 0.x releases are pre-releases and install over the previous one.
 
+## Unreleased: anonymous opt-in usage statistics
+
+**Privacy**
+- A new switch, "Share anonymous usage statistics", on the first-launch screen and in the menu's new Privacy section. Off on every install, including existing ones. With it on, Koggles sends six kinds of event count to Aptabase with the phone model, Android and app versions, language and a per-session random ID; the README's Privacy section lists every field. The app gains the INTERNET permission for this and nothing else.
+- Builds without an Aptabase key (plain CI, forks, local builds) hide the switch and never send anything.
+
 ## v0.5.0: calibration double tap, photosensitivity warning, documentation
 
 Released 2026-10-14. Installs over 0.4.0. No settings change meaning.

@@ -87,6 +87,14 @@ jobs:
             [ -n "${!v}" ] || { echo "signing secrets missing: refusing to build an unsigned release"; exit 1; }
           done
 
+      - name: Analytics key present
+        env:
+          APTABASE_KEY: ${{ vars.KOGGLES_APTABASE_KEY }}
+        run: |
+          # Public by design (it ships in the APK) but kept out of the tree so a fork does not inherit it. A release
+          # without it would ship a build whose analytics switch is hidden; refuse that silently-dead build.
+          [ -n "$APTABASE_KEY" ] || { echo "repository variable KOGGLES_APTABASE_KEY is not set"; exit 1; }
+
       - name: Unit tests
         run: ./gradlew --no-daemon :app:testDebugUnitTest
 
@@ -98,6 +106,7 @@ jobs:
           KEY_PW: ${{ secrets.KOGGLES_KEY_PASSWORD }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
+          APTABASE_KEY: ${{ vars.KOGGLES_APTABASE_KEY }}
         run: |
           set -euo pipefail
           ks="$RUNNER_TEMP/koggles.jks"
@@ -107,7 +116,8 @@ jobs:
           KOGGLES_KEYSTORE_FILE="$ks" KOGGLES_STORE_PASSWORD="$STORE_PW" \
           KOGGLES_KEY_ALIAS="$KEY_ALIAS" KOGGLES_KEY_PASSWORD="$KEY_PW" \
             ./gradlew --no-daemon :app:assembleRelease \
-              -PkogglesVersionName="$VERSION_NAME" -PkogglesVersionCode="$VERSION_CODE"
+              -PkogglesVersionName="$VERSION_NAME" -PkogglesVersionCode="$VERSION_CODE" \
+              -PkogglesAptabaseKey="$APTABASE_KEY"
 
       - name: Upload signed build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

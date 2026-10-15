@@ -34,6 +34,15 @@ keytool -list -v -keystore ~/.android/koggles-release.jks -alias koggles | grep 
 gh variable set KOGGLES_CERT_SHA256 --body '<the SHA256 value>'
 ```
 
+**2b. Set the analytics key.** The Aptabase app key is public (it ships in the APK) but lives only in a
+repository variable, so a fork builds with the analytics switch hidden rather than reporting into your
+dashboard. The release workflow refuses to build without it; plain CI never needs it. Locally, put the
+same line in `~/.gradle/gradle.properties` as `kogglesAptabaseKey=<key>`.
+
+```sh
+gh variable set KOGGLES_APTABASE_KEY --body '<the A-US-... key from the Aptabase console>'
+```
+
 **3. Create the `release` Environment.** In GitHub, go to Settings → Environments → New
 environment `release`, then:
 

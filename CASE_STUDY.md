@@ -46,6 +46,14 @@ The conclusion held, but the original evidence had not justified it. Adversarial
 
 [Shader diagnostics implementation and tests](https://github.com/carterchadams/koggles/commit/5be55738c2a0dc44f61c53ad530b5d28b46b5a9a)
 
+## Adding analytics without changing what the app is
+
+Before analytics, Koggles sent nothing anywhere; it did not even hold the network permission. I wanted to know whether anyone uses it and on which phones, and I wanted the integration to look like something a consumer app could ship. Those pulled in opposite directions only if I picked the default tool. Firebase Analytics assigns every install an identifier and sends it to Google before the user has agreed to anything, which under European rules is personal data needing consent up front, and which would change the app's character.
+
+I chose Aptabase, an open-source service that collects no device identifiers, and made it opt-in: off on every install, one switch on the first screen and in the menu. Because the vendor's SDK is a process-wide singleton that I did not want to think about anywhere else, it sits behind a one-method interface, with a consent gate in front that owns the on/off state itself and flips synchronously before anything is persisted. An adversarial review of the design found that my first disclosure was flattering: it said "no identifiers" while the SDK sends a per-session ID and the device model, and it promised an immediate stop while the SDK queues requests without timeouts. The README now lists every field, and an on-device test pins that list against a local server so the disclosure cannot drift from the wire.
+
+The app key is public by design but is not in the repository: forks build with the switch hidden, and the release pipeline refuses to run without the key rather than ship a build that silently reports nothing.
+
 ## What the project has established
 
 I enjoy using Koggles both in and out of treatment, and limited feedback from friends has been positive. That is enough reason to keep developing it. It is not yet broad validation across users, phones, or headsets. The treatment context explains the project's origin, not a claim of therapeutic benefit.
