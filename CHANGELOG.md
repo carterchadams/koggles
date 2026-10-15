@@ -2,11 +2,19 @@
 
 Every release is a signed APK on the [Releases](https://github.com/carterchadams/koggles/releases) page; the notes there carry the same text plus each file's SHA-256. All 0.x releases are pre-releases and install over the previous one.
 
-## Unreleased: anonymous opt-in usage statistics
+## v0.6.0: anonymous opt-in usage statistics
+
+Released 2026-10-15. Installs over 0.5.0. No settings change meaning.
 
 **Privacy**
-- A new switch, "Share anonymous usage statistics", on the first-launch screen and in the menu's new Privacy section. Off on every install, including existing ones. With it on, Koggles sends six kinds of event count to Aptabase with the phone model, Android and app versions, language and a per-session random ID; the README's Privacy section lists every field. The app gains the INTERNET permission for this and nothing else.
-- Builds without an Aptabase key (plain CI, forks, local builds) hide the switch and never send anything.
+- A new switch, "Share anonymous usage statistics", on the first-launch screen and in the menu's new Privacy section. Off on every install, including existing ones and ones restored from an Android backup: the choice is kept on the device only, outside the backup, and is never restored.
+- With it on, Koggles sends six kinds of event count to Aptabase (app started, session length, goggles on or off, wide view mode, viewer QR scanned, calibration finished) with the phone model, Android version, app version and build number, language, a debug flag, the library version, a timestamp and a random session ID that changes after an hour idle or on restart. No account, no advertising ID, no audio, no preset names, no file paths. The README's Privacy section lists every field, and an on-device test pins that list against what actually goes on the wire.
+- Turning the switch off stops everything from that moment; an event accepted just before may still be delivered once the network allows. Aptabase keeps data for up to five years and cannot link it to you, which also means it cannot be deleted on request.
+- The app gains the INTERNET permission for this and nothing else.
+
+**Builds**
+- Builds without an Aptabase key (plain CI, forks, local builds) hide the switch, never send anything, and do not even contain the analytics library.
+- Development and test builds report as debug data, which the dashboard keeps apart from real installs; only the release the pipeline ships reports real installs.
 
 ## v0.5.0: calibration double tap, photosensitivity warning, documentation
 
