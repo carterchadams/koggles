@@ -4,6 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -49,5 +52,22 @@ class ConsentStoreTest {
         } finally {
             dir.setWritable(true)
         }
+    }
+
+    /**
+     * Codex, round 3 (2026-10-15): persistence runs off the main thread, so two quick flips must not land out of order
+     * (a pending "on" recreating the file after a later "off" deleted it). [ConsentStore.set] queues onto one ordered
+     * writer: the decisions are persisted in the order they were made, and the last one is what the next start reads.
+     */
+    @Test fun decisionsArePersistedInTheOrderTheyWereMade() = runTest {
+        val f = file()
+        val s = ConsentStore(f, scope = this, io = StandardTestDispatcher(testScheduler))
+        s.set(true)
+        s.set(false)
+        s.set(true)
+        s.set(false)
+        testScheduler.advanceUntilIdle()
+        assertEquals(false, s.read())
+        assertFalse(f.exists())
     }
 }
