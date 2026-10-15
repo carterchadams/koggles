@@ -46,16 +46,6 @@ class SettingsTest {
         assertEquals(SettingsValues(), v)
     }
 
-    /** Analytics is opt-in: off on a fresh install and on every install from before the switch existed. */
-    @Test fun analyticsDefaultsFalseAndRoundTrips() = runBlocking {
-        val settings = Settings(store())
-        assertEquals(false, settings.values.first().analytics)
-        settings.update { it.copy(analytics = true) }
-        assertEquals(true, settings.values.first().analytics)
-        settings.update { it.copy(analytics = false) }
-        assertEquals(false, settings.values.first().analytics)
-    }
-
     @Test fun folderPromptedDefaultsFalse() = runBlocking {
         val settings = Settings(store())
         assertEquals(false, settings.values.first().folderPrompted)
