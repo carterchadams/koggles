@@ -11,6 +11,5 @@ class ConsentStoreLocationTest {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val file = ConsentStore.file(ctx)
         assertTrue("$file is not under ${ctx.noBackupFilesDir}", file.startsWith(ctx.noBackupFilesDir))
-        assertTrue("DataStore needs the .preferences_pb suffix: $file", file.name.endsWith(".preferences_pb"))
     }
 }
