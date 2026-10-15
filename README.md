@@ -64,7 +64,7 @@ How the visuals respond can vary by phone, audio route, and the app playing the 
 
 ### Privacy
 
-Koggles sends nothing anywhere unless you turn on **Share anonymous usage statistics** on the first screen or in the menu's Privacy section. The switch is off on every new install.
+Koggles sends nothing anywhere unless you turn on **Share anonymous usage statistics** on the first screen or in the menu's Privacy section. The switch is off on every new install, including one restored from an Android backup: your other settings are restored, your consent is not.
 
 With it on, the app sends event counts to [Aptabase](https://aptabase.com), hosted in the United States: app started, session length in minutes, goggles mode on or off, wide view mode, viewer QR scanned, spacing calibration finished. Each event carries your phone model, Android version, app version and build number, language, whether the build is a debug build, the analytics library's version, a timestamp, and a random session ID that changes after an hour without use or when the app restarts. Aptabase derives your country from your IP address and a daily-changing anonymous hash to estimate how many people use the app; it does not store the IP address. No account, no advertising ID, no audio, no preset names, no file paths.
 

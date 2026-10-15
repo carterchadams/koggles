@@ -176,7 +176,7 @@ class MenuTest {
 
     /**
      * Privacy (2026-10-14): one switch for the anonymous usage statistics, off by default, with its explanation,
-     * at the bottom above "About & licenses". Flipping it closes the consent gate first and then persists.
+     * at the bottom above "About & licenses". Flipping it flips the consent gate first and then persists to the consent store.
      */
     @Test fun privacy_switchIsOffByDefault_flipsTheGateAndTheSetting() {
         AppGraph.overrideTelemetryForTest(Telemetry {}) // a vendor behind the gate makes analytics available
@@ -188,11 +188,11 @@ class MenuTest {
             switch.assertIsOff()
             switch.performClick()
             compose.waitUntil(3_000) { AppGraph.telemetry.enabled.value }
-            compose.waitUntil(3_000) { runBlocking { AppGraph.settings.values.first().analytics } }
+            compose.waitUntil(3_000) { runBlocking { AppGraph.consent.read() } }
             switch.assertIsOn()
             switch.performClick()
             compose.waitUntil(3_000) { !AppGraph.telemetry.enabled.value }
-            compose.waitUntil(3_000) { !runBlocking { AppGraph.settings.values.first().analytics } }
+            compose.waitUntil(3_000) { !runBlocking { AppGraph.consent.read() } }
             switch.assertIsOff()
         } finally {
             compose.runOnUiThread { AppGraph.setAnalytics(false) }

@@ -26,6 +26,7 @@ import dev.koggles.ui.MenuState
 import dev.koggles.ui.SilenceDetector
 import dev.koggles.telemetry.AptabaseTelemetry
 import dev.koggles.telemetry.ConsentGate
+import dev.koggles.telemetry.ConsentStore
 import dev.koggles.telemetry.NoopTelemetry
 import dev.koggles.telemetry.Telemetry
 import kotlinx.coroutines.delay
@@ -106,8 +107,12 @@ object AppGraph {
     /** Main thread. */
     fun setAnalytics(on: Boolean) {
         telemetry.setEnabled(on)
-        appScope.launch { settings.update { it.copy(analytics = on) } }
+        appScope.launch { consent.write(on) }
     }
+
+    /** Where the consent is persisted: its own file, outside the backup (see [ConsentStore]). */
+    lateinit var consent: ConsentStore
+        private set
 
     @Volatile private var telemetryOverride: Telemetry? = null
 
@@ -176,7 +181,8 @@ object AppGraph {
         // One small blocking read at process start so the audio machine begins with the persisted
         // source and explainer flag; DataStore reads on its own IO scope, so this cannot deadlock main.
         val persisted = runBlocking { settings.values.first() }
-        telemetry = ConsentGate(persisted.analytics && analyticsAvailable) {
+        consent = ConsentStore(KogglesStore.create(CoroutineScope(SupervisorJob() + Dispatchers.IO)) { ConsentStore.file(app) })
+        telemetry = ConsentGate(runBlocking { consent.read() } && analyticsAvailable) {
             // Built on the first consented event. The SDK is initialised then and only then, and only if no test
             // has put a fake behind the gate; the fake is looked up per event so a test can swap it.
             val real by lazy { if (analyticsAvailable) AptabaseTelemetry(app, BuildConfig.APTABASE_KEY) else NoopTelemetry }
